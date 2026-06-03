@@ -27,9 +27,22 @@ func WithManifest() *runner.Manifest {
 	)
 
 	manifest.MustRegisterFeature(
+		"collect_applications",
+		"Collect Applications",
+		"Emit one Application per discovered datasource (accounts/groups/roles link to these via edges).",
+		runner.FeatureSchedulable,
+		runner.FeatureTypeCollector,
+		new(options.ApplicationEntityCollectorOptions),
+		(*connector.NoPayload)(nil),
+		runner.FeatureResumeBehaviorNone,
+		runner.GrantCredential,
+		runner.Factory(collectors.NewApplicationEntityCollector),
+	)
+
+	manifest.MustRegisterFeature(
 		"collect_accounts",
 		"Collect Accounts",
-		"Collect discovery accounts, optionally scoped to a single datasource.",
+		"Collect discovery accounts and link them to their datasource application.",
 		runner.FeatureSchedulable,
 		runner.FeatureTypeCollector,
 		new(options.AccountEntityCollectorOptions),
@@ -76,19 +89,6 @@ func WithManifest() *runner.Manifest {
 		runner.FeatureResumeBehaviorNone,
 		runner.GrantCredential,
 		runner.Factory(collectors.NewOwnerEntityCollector),
-	)
-
-	manifest.MustRegisterFeature(
-		"discover_datasources",
-		"Discover Datasources",
-		"Enumerate discovery datasources and register a mesh-discovery-<platform> provider + connector per datasource in mesh-core.",
-		runner.FeatureSchedulable,
-		runner.FeatureTypeCollector,
-		new(options.DiscoverDatasourcesOptions),
-		(*connector.NoPayload)(nil),
-		runner.FeatureResumeBehaviorNone,
-		runner.GrantCredential,
-		runner.Factory(collectors.NewDiscoverDatasourcesCollector),
 	)
 
 	if err := manifest.Validate(); err != nil {

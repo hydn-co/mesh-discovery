@@ -1,4 +1,15 @@
-# Plan: `mesh-discovery` — a self-replicating aggregator connector
+# Plan: `mesh-discovery` — discovery aggregator connector
+
+> **Architecture revised (superseding the self-replicating model below).** Instead
+> of derived per-datasource providers/connectors + an orchestrator (and the
+> mesh-core `DeriveProvider` change), mesh-discovery is now a **single connector**:
+> each discovered datasource is emitted as a catalog **`Application`**
+> (`ApplicationRef` = datasource id, `Name` = datasource name, `Description` =
+> platform), and accounts/groups/roles link to it via the existing
+> `ApplicationAccount` / `ApplicationGroup` / `ApplicationRole` edges. The
+> orchestrator, `mesh_mgmt_client`, derived-provider options, and per-datasource
+> scoping have been removed; a `collect_applications` feature was added. The
+> sections below are retained for historical context.
 
 ## Context
 

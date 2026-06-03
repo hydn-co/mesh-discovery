@@ -2,6 +2,10 @@ package options
 
 import "github.com/hydn-co/mesh-sdk/pkg/connectorutil"
 
+func (o *ApplicationEntityCollectorOptions) Validate() error {
+	return requireBaseURL("application collector options", o.BaseURL)
+}
+
 func (o *AccountEntityCollectorOptions) Validate() error {
 	return requireBaseURL("account collector options", o.BaseURL)
 }
@@ -16,10 +20,6 @@ func (o *OwnerEntityCollectorOptions) Validate() error {
 
 func (o *ApplicationRoleEntityCollectorOptions) Validate() error {
 	return requireBaseURL("application role collector options", o.BaseURL)
-}
-
-func (o *DiscoverDatasourcesOptions) Validate() error {
-	return requireBaseURL("discover datasources options", o.BaseURL)
 }
 
 func requireBaseURL(subject, baseURL string) error {

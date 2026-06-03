@@ -30,9 +30,11 @@
    third-party HTTP clients or provider SDKs.
 6. Collectors build their client via the `newClient` seam so tests can inject a
    fake (see `internal/collectors/entity_contract_test.go`).
-7. Datasource scoping: accounts scope by `data_source_id`; groups and roles scope
-   by `data_source_name` (group/role rows carry name, not id); memberships scope
-   via the in-scope group/account set.
+7. Datasources are catalog `Application`s (ApplicationRef = datasource id). One
+   discovery connector emits everything and links accounts/groups/roles to their
+   application via the `ApplicationAccount`/`ApplicationGroup`/`ApplicationRole`
+   edges. Accounts carry the datasource id; groups/roles carry the name, resolved
+   to an id via the account-feed index (`datasourceIDByName`).
 8. Wrap errors with `fmt.Errorf("context: %w", err)`; check `ctx.Err()` in loops.
 9. Behavioral test names: `TestShould{Expectation}When{Condition}`.
 

@@ -8,28 +8,28 @@ produces a unified inventory of accounts, groups, owners, and roles.
 `mesh-discovery` reads that inventory and emits it to the mesh catalog, organized
 **under the platform/datasource it came from**.
 
-## Self-replicating aggregator model
+## Model
 
-A single `mesh-discovery` binary runs in two modes via feature options:
+A single **`mesh-discovery`** connector represents every discovered datasource
+as a catalog **`Application`** (`ApplicationRef` = datasource id, `Name` =
+datasource name, `Description` = platform). Accounts, groups, and roles are
+emitted normally and linked to their datasource application through the existing
+catalog **edge** entities (`ApplicationAccount`, `ApplicationGroup`,
+`ApplicationRole`). Accounts carry the datasource id directly; groups and roles
+carry the datasource name, which is resolved to an id via an index built from
+the account feed (mirroring how control resolves `ApplicationID` by name).
 
-1. The base **`mesh-discovery`** provider hosts the collectors below plus an
-   orchestrator that enumerates discovery datasources and registers a
-   **`mesh-discovery-<platform>` provider + connector per datasource** in
-   mesh-core — each reusing this same binary, with a `data_source_id` baked into
-   its options.
-2. Each per-datasource connector emits only that datasource's entities, so the
-   catalog partitions data by platform/datasource automatically.
-
-See [PLAN.md](PLAN.md) for the full design and rationale.
+See [PLAN.md](PLAN.md) for the design and rationale.
 
 ## Features
 
-| Feature | Emits | Scope |
-|---|---|---|
-| `collect_accounts` | `Account` | per datasource (by `data_source_id`) |
-| `collect_groups` | `Group`, `GroupMember` | per datasource (by `data_source_name`) |
-| `collect_application_roles` | `Role`, `AccountRole` | per datasource |
-| `collect_owners` | `Person` | global (base provider only) |
+| Feature | Emits |
+|---|---|
+| `collect_applications` | `Application` (one per datasource) |
+| `collect_accounts` | `Account`, `ApplicationAccount` |
+| `collect_groups` | `Group`, `GroupMember`, `ApplicationGroup` |
+| `collect_application_roles` | `Role`, `AccountRole`, `ApplicationRole` |
+| `collect_owners` | `Person` |
 
 Credentials use the standard mesh **Grant credential**
 (`{client_id, client_secret}`) for the discovery `/auth/api` flow. The discovery

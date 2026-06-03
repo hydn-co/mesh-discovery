@@ -5,7 +5,6 @@ import "github.com/hydn-co/mesh-sdk/pkg/catalog/spaces"
 // AccountEntityCollectorOptions configures the account collector.
 type AccountEntityCollectorOptions struct {
 	DiscoveryOptionsCore `json:",inline"`
-	DatasourceScope      `json:",inline"`
 }
 
 func (o *AccountEntityCollectorOptions) GetDiscriminator() string {
@@ -13,7 +12,7 @@ func (o *AccountEntityCollectorOptions) GetDiscriminator() string {
 }
 
 func (o *AccountEntityCollectorOptions) GetSpaces() []spaces.Space {
-	return []spaces.Space{spaces.Accounts}
+	return []spaces.Space{spaces.Accounts, spaces.ApplicationAccounts}
 }
 
 func (o *AccountEntityCollectorOptions) GetRequirements() []string {

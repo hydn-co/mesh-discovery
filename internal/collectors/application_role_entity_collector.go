@@ -15,10 +15,11 @@ import (
 	"github.com/hydn-co/mesh-discovery/internal/options"
 )
 
-// ApplicationRoleEntityCollector collects discovery application roles
-// (entitlements) and per-account role memberships, emitting Role and
-// AccountRole entities. Roles are scoped by datasource NAME; memberships are
-// fetched per account (scoped by datasource id) and filtered to roles in scope.
+// ApplicationRoleEntityCollector emits discovery application roles (entitlements)
+// as catalog Role entities, links each to its datasource Application via an
+// ApplicationRole edge, and emits account<->role memberships as AccountRole
+// edges. Role rows carry the datasource NAME (resolved to an application id via
+// the account-feed index); memberships stream as edge.role records.
 type ApplicationRoleEntityCollector struct {
 	*connector.TypedFeatureContext[*options.ApplicationRoleEntityCollectorOptions, *connector.NoPayload]
 
@@ -50,17 +51,16 @@ func (c *ApplicationRoleEntityCollector) Start(ctx context.Context) error {
 		return fmt.Errorf("discovery credentials: %w", err)
 	}
 
-	opts := c.GetOptions()
-	client := c.newClient(opts.GetBaseURL(), clientID, clientSecret)
-	scopeName := opts.GetDataSourceName()
-	scopeID := opts.GetDataSourceID()
+	client := c.newClient(c.GetOptions().GetBaseURL(), clientID, clientSecret)
 
-	// Pass 1: emit roles (entitlements) for this datasource.
+	appIDByName, err := datasourceIDByName(ctx, client)
+	if err != nil {
+		return fmt.Errorf("build datasource index: %w", err)
+	}
+
+	// Pass 1: emit roles + application links.
 	if err := client.ForEachApplicationRolePage(ctx, func(page []api.Row, _, _ int) error {
 		for _, row := range page {
-			if scopeName != "" && mappings.RoleDatasourceName(row) != scopeName {
-				continue
-			}
 			role := mappings.MapApplicationRole(row)
 			if role == nil {
 				continue
@@ -68,18 +68,22 @@ func (c *ApplicationRoleEntityCollector) Start(ctx context.Context) error {
 			if err := c.Emit(ctx, role); err != nil {
 				return fmt.Errorf("emit role %s: %w", role.RoleRef, err)
 			}
+			if appRef := appIDByName[mappings.RoleDatasourceName(row)]; appRef != "" {
+				if edge := mappings.NewApplicationRole(appRef, role.RoleRef); edge != nil {
+					if err := c.Emit(ctx, edge); err != nil {
+						return fmt.Errorf("emit application-role %s: %w", role.RoleRef, err)
+					}
+				}
+			}
 		}
 		return nil
 	}); err != nil {
 		return err
 	}
 
-	// Pass 2: emit role memberships. Mirrors control's app-role-membership sync,
-	// which streams edge.role records per datasource via /internal/v1/datastore/fetch
-	// (edge.From = role external id, edge.To = account external id) rather than
-	// the old per-account search loop. The fetch endpoint scopes by datasource id
-	// server-side, so this is also the per-datasource scope.
-	return client.FetchEntities(ctx, scopeID, "edge.role", func(edge *api.FetchedEntity) error {
+	// Pass 2: emit account<->role memberships from the edge.role stream
+	// (edge.From = role external id, edge.To = account external id).
+	return client.FetchEntities(ctx, "", "edge.role", func(edge *api.FetchedEntity) error {
 		if edge.Tombstoned {
 			return nil
 		}

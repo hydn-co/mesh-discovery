@@ -15,10 +15,10 @@ import (
 	"github.com/hydn-co/mesh-discovery/internal/options"
 )
 
-// GroupEntityCollector collects discovery groups and their memberships. Groups
-// are scoped by datasource NAME (group rows carry "Data Source Name", not id);
-// memberships are scoped to the groups of the datasource since membership rows
-// carry no datasource of their own.
+// GroupEntityCollector emits discovery groups and their memberships, and links
+// each group to its datasource Application via an ApplicationGroup edge. Group
+// rows carry the datasource NAME, so the application id is resolved through the
+// name->id index built from the account feed.
 type GroupEntityCollector struct {
 	*connector.TypedFeatureContext[*options.GroupEntityCollectorOptions, *connector.NoPayload]
 
@@ -45,25 +45,29 @@ func (c *GroupEntityCollector) Start(ctx context.Context) error {
 		return fmt.Errorf("discovery credentials: %w", err)
 	}
 
-	opts := c.GetOptions()
-	client := c.newClient(opts.GetBaseURL(), clientID, clientSecret)
-	scopeName := opts.GetDataSourceName()
+	client := c.newClient(c.GetOptions().GetBaseURL(), clientID, clientSecret)
 
-	// Pass 1: emit groups, recording the refs that belong to this datasource so
-	// memberships can be scoped to them.
-	groupRefs := make(map[string]struct{})
+	appIDByName, err := datasourceIDByName(ctx, client)
+	if err != nil {
+		return fmt.Errorf("build datasource index: %w", err)
+	}
+
+	// Pass 1: emit groups + application links.
 	if err := client.ForEachGroupPage(ctx, func(page []api.Row, _, _ int) error {
 		for _, row := range page {
-			if scopeName != "" && mappings.GroupDatasourceName(row) != scopeName {
-				continue
-			}
 			group := mappings.MapGroup(row)
 			if group == nil {
 				continue
 			}
-			groupRefs[group.GroupRef] = struct{}{}
 			if err := c.Emit(ctx, group); err != nil {
 				return fmt.Errorf("emit group %s: %w", group.GroupRef, err)
+			}
+			if appRef := appIDByName[mappings.GroupDatasourceName(row)]; appRef != "" {
+				if edge := mappings.NewApplicationGroup(appRef, group.GroupRef); edge != nil {
+					if err := c.Emit(ctx, edge); err != nil {
+						return fmt.Errorf("emit application-group %s: %w", group.GroupRef, err)
+					}
+				}
 			}
 		}
 		return nil
@@ -71,14 +75,9 @@ func (c *GroupEntityCollector) Start(ctx context.Context) error {
 		return err
 	}
 
-	// Pass 2: emit memberships for groups in scope.
+	// Pass 2: emit memberships.
 	return client.ForEachGroupMembershipPage(ctx, func(page []api.Row, _, _ int) error {
 		for _, row := range page {
-			if scopeName != "" {
-				if _, ok := groupRefs[mappings.MembershipGroupRef(row)]; !ok {
-					continue
-				}
-			}
 			member := mappings.MapGroupMember(row)
 			if member == nil {
 				continue

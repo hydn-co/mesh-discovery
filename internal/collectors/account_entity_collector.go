@@ -15,8 +15,8 @@ import (
 	"github.com/hydn-co/mesh-discovery/internal/options"
 )
 
-// AccountEntityCollector collects discovery accounts, optionally scoped to a
-// single datasource, and emits them as catalog Account entities.
+// AccountEntityCollector emits discovery accounts as catalog Account entities and
+// links each to its datasource Application via an ApplicationAccount edge.
 type AccountEntityCollector struct {
 	*connector.TypedFeatureContext[*options.AccountEntityCollectorOptions, *connector.NoPayload]
 
@@ -43,21 +43,23 @@ func (c *AccountEntityCollector) Start(ctx context.Context) error {
 		return fmt.Errorf("discovery credentials: %w", err)
 	}
 
-	opts := c.GetOptions()
-	client := c.newClient(opts.GetBaseURL(), clientID, clientSecret)
-	scope := opts.GetDataSourceID()
+	client := c.newClient(c.GetOptions().GetBaseURL(), clientID, clientSecret)
 
 	return client.ForEachAccountPage(ctx, func(page []api.Row, _, _ int) error {
 		for _, row := range page {
-			if scope != "" && mappings.DatasourceOf(row).ID != scope {
-				continue
-			}
 			account := mappings.MapAccount(row)
 			if account == nil {
 				continue
 			}
 			if err := c.Emit(ctx, account); err != nil {
 				return fmt.Errorf("emit account %s: %w", account.AccountRef, err)
+			}
+			// Link the account to its datasource application. Accounts carry the
+			// datasource id directly, so no name resolution is needed here.
+			if edge := mappings.NewApplicationAccount(mappings.DatasourceOf(row).ID, account.AccountRef); edge != nil {
+				if err := c.Emit(ctx, edge); err != nil {
+					return fmt.Errorf("emit application-account %s: %w", account.AccountRef, err)
+				}
 			}
 		}
 		return nil

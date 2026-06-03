@@ -2,10 +2,10 @@ package options
 
 import "github.com/hydn-co/mesh-sdk/pkg/catalog/spaces"
 
-// GroupEntityCollectorOptions configures the group collector (groups + memberships).
+// GroupEntityCollectorOptions configures the group collector (groups,
+// memberships, and group<->application links).
 type GroupEntityCollectorOptions struct {
 	DiscoveryOptionsCore `json:",inline"`
-	DatasourceScope      `json:",inline"`
 }
 
 func (o *GroupEntityCollectorOptions) GetDiscriminator() string {
@@ -13,7 +13,7 @@ func (o *GroupEntityCollectorOptions) GetDiscriminator() string {
 }
 
 func (o *GroupEntityCollectorOptions) GetSpaces() []spaces.Space {
-	return []spaces.Space{spaces.Groups, spaces.GroupMembers}
+	return []spaces.Space{spaces.Groups, spaces.GroupMembers, spaces.ApplicationGroups}
 }
 
 func (o *GroupEntityCollectorOptions) GetRequirements() []string {

@@ -46,9 +46,3 @@ func MapGroupMember(row api.Row) *entities.GroupMember {
 		AccountRef: accountRef,
 	}
 }
-
-// MembershipGroupRef returns the group id referenced by a membership row, used
-// to scope memberships to the groups of a single datasource.
-func MembershipGroupRef(row api.Row) string {
-	return getString(row, "Group ID")
-}

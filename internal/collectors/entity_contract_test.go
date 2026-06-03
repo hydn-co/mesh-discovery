@@ -28,21 +28,25 @@ func (e *captureEntityEmitter) Emit(_ context.Context, entity any) error {
 	return nil
 }
 
-// fakeDiscoveryClient returns canned discovery rows. It covers two datasources
-// ("ds1" / "ds2", names "ds1-name" / "ds2-name") so scoping can be verified.
+// fakeDiscoveryClient returns canned discovery rows across two datasources:
+// ds1 ("ds1-name", platform AD) and ds2 ("ds2-name", platform Entra).
 type fakeDiscoveryClient struct{}
 
 func (fakeDiscoveryClient) ForEachAccountPage(_ context.Context, cb api.PageFunc) error {
 	return cb([]api.Row{
 		{
-			"Id":             "acc-1",
-			"Account Name":   "Alice",
-			"Email":          "alice@ds1.example",
-			"Account Type":   "User",
-			"Data Source Id": "ds1",
+			"Id": "acc-1", "Account Name": "Alice", "Email": "alice@ds1.example",
+			"Account Type": "User", "Data Source Id": "ds1",
+			"Data Source Name": "ds1-name", "Data Source Platform": "AD",
 		},
-		{"Id": "acc-2", "Account Name": "svc", "Account Type": "Service Account", "Data Source Id": "ds1"},
-		{"Id": "acc-3", "Account Name": "Bob", "Email": "bob@ds2.example", "Data Source Id": "ds2"},
+		{
+			"Id": "acc-2", "Account Name": "svc", "Account Type": "Service Account",
+			"Data Source Id": "ds1", "Data Source Name": "ds1-name", "Data Source Platform": "AD",
+		},
+		{
+			"Id": "acc-3", "Account Name": "Bob", "Email": "bob@ds2.example",
+			"Data Source Id": "ds2", "Data Source Name": "ds2-name", "Data Source Platform": "Entra",
+		},
 	}, 1, 3)
 }
 
@@ -104,6 +108,10 @@ func newContractContext[T connector.FeatureOptions](
 	)
 }
 
+func discoveryCore() options.DiscoveryOptionsCore {
+	return options.DiscoveryOptionsCore{BaseURL: "https://discovery.example"}
+}
+
 func fakeFactory(_, _, _ string) discoveryClient { return fakeDiscoveryClient{} }
 
 func runCollector(t *testing.T, c interface {
@@ -118,41 +126,62 @@ func runCollector(t *testing.T, c interface {
 	require.NoError(t, c.Stop(context.Background()))
 }
 
-func TestShouldOnlyEmitAccountsScopedToDatasourceWhenAccountCollectorRuns(t *testing.T) {
+func TestShouldEmitApplicationPerDatasourceWhenApplicationCollectorRuns(t *testing.T) {
 	emitter := &captureEntityEmitter{}
-	c := &AccountEntityCollector{
-		TypedFeatureContext: newContractContext(t, emitter, &options.AccountEntityCollectorOptions{
-			DiscoveryOptionsCore: options.DiscoveryOptionsCore{BaseURL: "https://discovery.example"},
-			DatasourceScope:      options.DatasourceScope{DataSourceID: "ds1"},
-		}),
+	c := &ApplicationEntityCollector{
+		TypedFeatureContext: newContractContext(t, emitter,
+			&options.ApplicationEntityCollectorOptions{DiscoveryOptionsCore: discoveryCore()}),
 		newClient: fakeFactory,
 	}
 	runCollector(t, c)
 
-	assertEmittedEntityContract(t, emitter.emitted, []any{&entities.Account{}},
-		(&options.AccountEntityCollectorOptions{}).GetSpaces())
-	require.Len(t, emitter.emitted, 2, "only ds1 accounts should be emitted")
+	assertEmittedEntityContract(t, emitter.emitted, []any{&entities.Application{}},
+		(&options.ApplicationEntityCollectorOptions{}).GetSpaces())
+
+	byRef := map[string]*entities.Application{}
 	for _, e := range emitter.emitted {
-		require.NotEqual(t, "acc-3", e.(*entities.Account).AccountRef)
+		app := e.(*entities.Application)
+		byRef[app.ApplicationRef] = app
 	}
+	require.Len(t, byRef, 2)
+	require.Equal(t, "ds1-name", byRef["ds1"].Name)
+	require.Equal(t, "AD", byRef["ds1"].Description)
+	require.Equal(t, "Entra", byRef["ds2"].Description)
 }
 
-func TestShouldEmitGroupsAndMembersScopedByNameWhenGroupCollectorRuns(t *testing.T) {
+func TestShouldEmitAccountsAndApplicationLinksWhenAccountCollectorRuns(t *testing.T) {
 	emitter := &captureEntityEmitter{}
-	c := &GroupEntityCollector{
-		TypedFeatureContext: newContractContext(t, emitter, &options.GroupEntityCollectorOptions{
-			DiscoveryOptionsCore: options.DiscoveryOptionsCore{BaseURL: "https://discovery.example"},
-			DatasourceScope:      options.DatasourceScope{DataSourceName: "ds1-name"},
-		}),
+	c := &AccountEntityCollector{
+		TypedFeatureContext: newContractContext(t, emitter,
+			&options.AccountEntityCollectorOptions{DiscoveryOptionsCore: discoveryCore()}),
 		newClient: fakeFactory,
 	}
 	runCollector(t, c)
 
-	assertEmittedEntityContract(t, emitter.emitted, []any{&entities.Group{}, &entities.GroupMember{}},
+	assertEmittedEntityContract(t, emitter.emitted, []any{&entities.Account{}, &entities.ApplicationAccount{}},
+		(&options.AccountEntityCollectorOptions{}).GetSpaces())
+
+	links := applicationAccountLinks(emitter.emitted)
+	require.Equal(t, "ds1", links["acc-1"])
+	require.Equal(t, "ds2", links["acc-3"])
+}
+
+func TestShouldEmitGroupsMembersAndApplicationLinksWhenGroupCollectorRuns(t *testing.T) {
+	emitter := &captureEntityEmitter{}
+	c := &GroupEntityCollector{
+		TypedFeatureContext: newContractContext(t, emitter,
+			&options.GroupEntityCollectorOptions{DiscoveryOptionsCore: discoveryCore()}),
+		newClient: fakeFactory,
+	}
+	runCollector(t, c)
+
+	assertEmittedEntityContract(t, emitter.emitted,
+		[]any{&entities.Group{}, &entities.GroupMember{}, &entities.ApplicationGroup{}},
 		(&options.GroupEntityCollectorOptions{}).GetSpaces())
+
 	for _, e := range emitter.emitted {
-		if m, ok := e.(*entities.GroupMember); ok {
-			require.Equal(t, "grp-1", m.GroupRef, "only ds1 group members should be emitted")
+		if edge, ok := e.(*entities.ApplicationGroup); ok && edge.GroupRef == "grp-1" {
+			require.Equal(t, "ds1", edge.ApplicationRef, "group resolves datasource name->id")
 		}
 	}
 }
@@ -160,9 +189,8 @@ func TestShouldEmitGroupsAndMembersScopedByNameWhenGroupCollectorRuns(t *testing
 func TestShouldEmitPersonsWhenOwnerCollectorRuns(t *testing.T) {
 	emitter := &captureEntityEmitter{}
 	c := &OwnerEntityCollector{
-		TypedFeatureContext: newContractContext(t, emitter, &options.OwnerEntityCollectorOptions{
-			DiscoveryOptionsCore: options.DiscoveryOptionsCore{BaseURL: "https://discovery.example"},
-		}),
+		TypedFeatureContext: newContractContext(t, emitter,
+			&options.OwnerEntityCollectorOptions{DiscoveryOptionsCore: discoveryCore()}),
 		newClient: fakeFactory,
 	}
 	runCollector(t, c)
@@ -171,25 +199,40 @@ func TestShouldEmitPersonsWhenOwnerCollectorRuns(t *testing.T) {
 		(&options.OwnerEntityCollectorOptions{}).GetSpaces())
 }
 
-func TestShouldEmitRolesAndAccountRolesScopedWhenApplicationRoleCollectorRuns(t *testing.T) {
+func TestShouldEmitRolesLinksAndMembershipsWhenApplicationRoleCollectorRuns(t *testing.T) {
 	emitter := &captureEntityEmitter{}
 	c := &ApplicationRoleEntityCollector{
-		TypedFeatureContext: newContractContext(t, emitter, &options.ApplicationRoleEntityCollectorOptions{
-			DiscoveryOptionsCore: options.DiscoveryOptionsCore{BaseURL: "https://discovery.example"},
-			DatasourceScope:      options.DatasourceScope{DataSourceID: "ds1", DataSourceName: "ds1-name"},
-		}),
+		TypedFeatureContext: newContractContext(t, emitter,
+			&options.ApplicationRoleEntityCollectorOptions{DiscoveryOptionsCore: discoveryCore()}),
 		newClient: fakeFactory,
 	}
 	runCollector(t, c)
 
-	assertEmittedEntityContract(t, emitter.emitted, []any{&entities.Role{}, &entities.AccountRole{}},
+	assertEmittedEntityContract(t, emitter.emitted,
+		[]any{&entities.Role{}, &entities.AccountRole{}, &entities.ApplicationRole{}},
 		(&options.ApplicationRoleEntityCollectorOptions{}).GetSpaces())
+
 	for _, e := range emitter.emitted {
-		if ar, ok := e.(*entities.AccountRole); ok {
-			require.Equal(t, "acc-1", ar.AccountRef)
-			require.Equal(t, "role-1", ar.RoleRef)
+		switch v := e.(type) {
+		case *entities.ApplicationRole:
+			if v.RoleRef == "role-1" {
+				require.Equal(t, "ds1", v.ApplicationRef, "role resolves datasource name->id")
+			}
+		case *entities.AccountRole:
+			require.Equal(t, "acc-1", v.AccountRef)
+			require.Equal(t, "role-1", v.RoleRef)
 		}
 	}
+}
+
+func applicationAccountLinks(emitted []any) map[string]string {
+	out := map[string]string{}
+	for _, e := range emitted {
+		if edge, ok := e.(*entities.ApplicationAccount); ok {
+			out[edge.AccountRef] = edge.ApplicationRef
+		}
+	}
+	return out
 }
 
 // assertEmittedEntityContract verifies the collector emitted only the allowed
