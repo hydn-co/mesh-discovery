@@ -34,7 +34,13 @@ type fakeDiscoveryClient struct{}
 
 func (fakeDiscoveryClient) ForEachAccountPage(_ context.Context, cb api.PageFunc) error {
 	return cb([]api.Row{
-		{"Id": "acc-1", "Account Name": "Alice", "Email": "alice@ds1.example", "Account Type": "User", "Data Source Id": "ds1"},
+		{
+			"Id":             "acc-1",
+			"Account Name":   "Alice",
+			"Email":          "alice@ds1.example",
+			"Account Type":   "User",
+			"Data Source Id": "ds1",
+		},
 		{"Id": "acc-2", "Account Name": "svc", "Account Type": "Service Account", "Data Source Id": "ds1"},
 		{"Id": "acc-3", "Account Name": "Bob", "Email": "bob@ds2.example", "Data Source Id": "ds2"},
 	}, 1, 3)
@@ -69,7 +75,9 @@ func (fakeDiscoveryClient) ForEachApplicationRolePage(_ context.Context, cb api.
 
 func (fakeDiscoveryClient) GetAccountAppRoles(_ context.Context, accountExternalID string) ([]api.Row, error) {
 	if accountExternalID == "acc-1" {
-		return []api.Row{{"Role Id": "role-1", "Role Name": "Global Administrator", "Data Source Name": "ds1-name"}}, nil
+		return []api.Row{
+			{"Role Id": "role-1", "Role Name": "Global Administrator", "Data Source Name": "ds1-name"},
+		}, nil
 	}
 	return nil, nil
 }
@@ -101,7 +109,8 @@ func runCollector(t *testing.T, c interface {
 	Init(context.Context) error
 	Start(context.Context) error
 	Stop(context.Context) error
-}) {
+},
+) {
 	t.Helper()
 	require.NoError(t, c.Init(context.Background()))
 	require.NoError(t, c.Start(context.Background()))

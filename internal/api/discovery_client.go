@@ -219,7 +219,10 @@ func (c *Client) executeWithRetry(ctx context.Context, req *http.Request, body [
 
 		retry := err != nil
 		switch status {
-		case http.StatusTooManyRequests, http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout:
+		case http.StatusTooManyRequests,
+			http.StatusBadGateway,
+			http.StatusServiceUnavailable,
+			http.StatusGatewayTimeout:
 			retry = true
 		}
 		if resp != nil && resp.Body != nil {

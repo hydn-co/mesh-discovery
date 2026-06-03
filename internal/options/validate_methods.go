@@ -18,6 +18,10 @@ func (o *ApplicationRoleEntityCollectorOptions) Validate() error {
 	return requireBaseURL("application role collector options", o.BaseURL)
 }
 
+func (o *DiscoverDatasourcesOptions) Validate() error {
+	return requireBaseURL("discover datasources options", o.BaseURL)
+}
+
 func requireBaseURL(subject, baseURL string) error {
 	return connectorutil.RequireStrings(
 		subject,

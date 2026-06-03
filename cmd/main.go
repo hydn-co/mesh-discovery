@@ -78,6 +78,19 @@ func WithManifest() *runner.Manifest {
 		runner.Factory(collectors.NewOwnerEntityCollector),
 	)
 
+	manifest.MustRegisterFeature(
+		"discover_datasources",
+		"Discover Datasources",
+		"Enumerate discovery datasources and register a mesh-discovery-<platform> provider + connector per datasource in mesh-core.",
+		runner.FeatureSchedulable,
+		runner.FeatureTypeCollector,
+		new(options.DiscoverDatasourcesOptions),
+		(*connector.NoPayload)(nil),
+		runner.FeatureResumeBehaviorNone,
+		runner.GrantCredential,
+		runner.Factory(collectors.NewDiscoverDatasourcesCollector),
+	)
+
 	if err := manifest.Validate(); err != nil {
 		panic(err)
 	}

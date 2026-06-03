@@ -38,7 +38,12 @@ func (c *ApplicationRoleEntityCollector) Init(_ context.Context) error {
 func (c *ApplicationRoleEntityCollector) Stop(_ context.Context) error { return nil }
 
 func (c *ApplicationRoleEntityCollector) Start(ctx context.Context) error {
-	connectorutil.LogFeature(ctx, c.TypedFeatureContext, slog.LevelInfo, "Starting discovery application role collector")
+	connectorutil.LogFeature(
+		ctx,
+		c.TypedFeatureContext,
+		slog.LevelInfo,
+		"Starting discovery application role collector",
+	)
 
 	clientID, clientSecret, err := credentials.ExtractClientCredentials(c.GetCredentials())
 	if err != nil {

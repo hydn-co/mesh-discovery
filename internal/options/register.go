@@ -7,4 +7,5 @@ func init() {
 	polymorphic.RegisterType[GroupEntityCollectorOptions]()
 	polymorphic.RegisterType[OwnerEntityCollectorOptions]()
 	polymorphic.RegisterType[ApplicationRoleEntityCollectorOptions]()
+	polymorphic.RegisterType[DiscoverDatasourcesOptions]()
 }

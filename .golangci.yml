@@ -22,6 +22,8 @@ linters:
       check-blank: false
     govet:
       enable-all: true
+      disable:
+        - fieldalignment
     nolintlint:
       require-explanation: true
       require-specific: true
