@@ -29,17 +29,11 @@ func MapApplicationRole(row api.Row) *entities.Role {
 	}
 }
 
-// AppRoleMembershipRoleRef returns the role id referenced by a per-account
-// app-role membership row ("Role Id", with a lowercase "id" fallback — see
-// control's mapping_app_role_membership.go).
-func AppRoleMembershipRoleRef(row api.Row) string {
-	return firstNonEmpty(row, "Role Id", "id")
-}
-
-// MapAccountRole builds an AccountRole linking the given account to the role in
-// a per-account app-role membership row. Returns nil when the role id is absent.
-func MapAccountRole(accountRef string, membershipRow api.Row) *entities.AccountRole {
-	roleRef := AppRoleMembershipRoleRef(membershipRow)
+// NewAccountRole builds an AccountRole linking an account to a role. Refs come
+// from an edge.role record streamed via FetchEntities (edge.From = role id,
+// edge.To = account id), matching control's app-role-membership sync. Returns
+// nil when either ref is empty.
+func NewAccountRole(accountRef, roleRef string) *entities.AccountRole {
 	if accountRef == "" || roleRef == "" {
 		return nil
 	}

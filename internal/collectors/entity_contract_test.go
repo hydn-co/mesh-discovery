@@ -73,13 +73,14 @@ func (fakeDiscoveryClient) ForEachApplicationRolePage(_ context.Context, cb api.
 	}, 1, 2)
 }
 
-func (fakeDiscoveryClient) GetAccountAppRoles(_ context.Context, accountExternalID string) ([]api.Row, error) {
-	if accountExternalID == "acc-1" {
-		return []api.Row{
-			{"Role Id": "role-1", "Role Name": "Global Administrator", "Data Source Name": "ds1-name"},
-		}, nil
+func (fakeDiscoveryClient) FetchEntities(
+	_ context.Context, _, entityType string, cb func(*api.FetchedEntity) error,
+) error {
+	if entityType != "edge.role" {
+		return nil
 	}
-	return nil, nil
+	// edge.role: From = role external id, To = account external id.
+	return cb(&api.FetchedEntity{Type: "edge.role", From: "role-1", To: "acc-1"})
 }
 
 func newContractContext[T connector.FeatureOptions](

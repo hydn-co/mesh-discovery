@@ -15,7 +15,7 @@ type discoveryClient interface {
 	ForEachGroupMembershipPage(ctx context.Context, cb api.PageFunc) error
 	ForEachOwnerPage(ctx context.Context, cb api.PageFunc) error
 	ForEachApplicationRolePage(ctx context.Context, cb api.PageFunc) error
-	GetAccountAppRoles(ctx context.Context, accountExternalID string) ([]api.Row, error)
+	FetchEntities(ctx context.Context, dataSourceID, entityType string, cb func(*api.FetchedEntity) error) error
 }
 
 // clientFactory builds a discoveryClient; swapped in tests via the collector's

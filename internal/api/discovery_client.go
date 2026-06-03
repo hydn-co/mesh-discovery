@@ -32,6 +32,7 @@ const (
 	endpointGroupMemberships = "/api/v1/global/ssrmquery/W8fSFbTri7TqbXWgdZVpBjLZMNn"
 	endpointApplicationRoles = "/api/v1/global/ssrmquery/JipWtKNEWU2BrJN2YY6TOVZvl2N"
 	endpointAccountAppRoles  = "/api/v1/global/search/6jZNu3bAmCBJ5rZtN6V1FDQN6ms"
+	endpointDatastoreFetch   = "/internal/v1/datastore/fetch"
 
 	defaultPageLimit = 1000
 	tokenSafetyTTL   = 5 * time.Minute
@@ -399,4 +400,71 @@ func (c *Client) GetAccountAppRoles(ctx context.Context, accountExternalID strin
 		return nil, fmt.Errorf("decode discovery GetAccountAppRoles response: %w", decErr)
 	}
 	return toRows(sr.Rows), nil
+}
+
+// FetchedEntity is one record from /internal/v1/datastore/fetch, mirroring
+// hydn's datastore TargetEntity wire shape. For edge types, From/To carry the
+// related entities' external ids (e.g. edge.role: From=role id, To=account id).
+type FetchedEntity struct {
+	ID           string         `json:"id"`
+	From         string         `json:"from,omitempty"`
+	To           string         `json:"to,omitempty"`
+	DataSourceID string         `json:"dataSourceId"`
+	Type         string         `json:"type"`
+	Entity       map[string]any `json:"entity"`
+	Tombstoned   bool           `json:"tombstoned"`
+}
+
+// FetchEntities streams every entity of entityType for dataSourceID from the
+// datastore fetch endpoint, decoding the JSON array element-by-element so memory
+// stays bounded. Returning an error from cb aborts the stream. An empty
+// dataSourceID scans across data sources. Mirrors control's hydden FetchEntities
+// (added when app-role memberships moved to edge.role streaming).
+func (c *Client) FetchEntities(
+	ctx context.Context,
+	dataSourceID, entityType string,
+	cb func(*FetchedEntity) error,
+) error {
+	body, _ := json.Marshal(map[string]any{
+		"dataSourceId": dataSourceID,
+		"entity":       map[string]any{"entityType": entityType, "tombstoned": false},
+	})
+	resp, err := c.doAuthenticated(ctx, http.MethodPost, c.baseURL+endpointDatastoreFetch, body)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("discovery FetchEntities returned status %d: %s", resp.StatusCode, string(b))
+	}
+	reader, err := decodeBody(resp)
+	if err != nil {
+		return err
+	}
+	if reader != resp.Body {
+		defer func() { _ = reader.Close() }()
+	}
+
+	dec := json.NewDecoder(reader)
+	tok, err := dec.Token()
+	if err != nil {
+		return fmt.Errorf("read fetch array opener: %w", err)
+	}
+	if d, ok := tok.(json.Delim); !ok || d != '[' {
+		return fmt.Errorf("expected fetch array opener, got %v", tok)
+	}
+	for dec.More() {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		var entity FetchedEntity
+		if err := dec.Decode(&entity); err != nil {
+			return fmt.Errorf("decode fetched entity: %w", err)
+		}
+		if err := cb(&entity); err != nil {
+			return err
+		}
+	}
+	return nil
 }

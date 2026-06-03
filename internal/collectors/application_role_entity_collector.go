@@ -74,33 +74,21 @@ func (c *ApplicationRoleEntityCollector) Start(ctx context.Context) error {
 		return err
 	}
 
-	// Pass 2: emit per-account role memberships. App-role memberships are only
-	// available per account, so iterate accounts in scope and fetch each.
-	return client.ForEachAccountPage(ctx, func(page []api.Row, _, _ int) error {
-		for _, row := range page {
-			if scopeID != "" && mappings.DatasourceOf(row).ID != scopeID {
-				continue
-			}
-			accountRef := mappings.AccountRef(row)
-			if accountRef == "" {
-				continue
-			}
-			memberships, err := client.GetAccountAppRoles(ctx, accountRef)
-			if err != nil {
-				return fmt.Errorf("fetch app roles for account %s: %w", accountRef, err)
-			}
-			for _, mrow := range memberships {
-				if scopeName != "" && mappings.RoleDatasourceName(mrow) != scopeName {
-					continue
-				}
-				accountRole := mappings.MapAccountRole(accountRef, mrow)
-				if accountRole == nil {
-					continue
-				}
-				if err := c.Emit(ctx, accountRole); err != nil {
-					return fmt.Errorf("emit account role %s/%s: %w", accountRole.AccountRef, accountRole.RoleRef, err)
-				}
-			}
+	// Pass 2: emit role memberships. Mirrors control's app-role-membership sync,
+	// which streams edge.role records per datasource via /internal/v1/datastore/fetch
+	// (edge.From = role external id, edge.To = account external id) rather than
+	// the old per-account search loop. The fetch endpoint scopes by datasource id
+	// server-side, so this is also the per-datasource scope.
+	return client.FetchEntities(ctx, scopeID, "edge.role", func(edge *api.FetchedEntity) error {
+		if edge.Tombstoned {
+			return nil
+		}
+		accountRole := mappings.NewAccountRole(edge.To, edge.From)
+		if accountRole == nil {
+			return nil
+		}
+		if err := c.Emit(ctx, accountRole); err != nil {
+			return fmt.Errorf("emit account role %s/%s: %w", accountRole.AccountRef, accountRole.RoleRef, err)
 		}
 		return nil
 	})
