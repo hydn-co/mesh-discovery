@@ -3,9 +3,8 @@ package options
 import "github.com/hydn-co/mesh-sdk/pkg/catalog/spaces"
 
 // OwnerEntityCollectorOptions configures the owner collector. Owners are global
-// identities that transcend datasources, so this collector is NOT datasource
-// scoped — the orchestrator registers it on the base mesh-discovery provider
-// only, where it emits the full owner/identity catalog as Persons.
+// identities that transcend datasources, so they are emitted as Persons with no
+// application link.
 type OwnerEntityCollectorOptions struct {
 	DiscoveryOptionsCore `json:",inline"`
 }

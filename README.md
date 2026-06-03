@@ -25,11 +25,11 @@ See [PLAN.md](PLAN.md) for the design and rationale.
 
 | Feature | Emits |
 |---|---|
-| `collect_applications` | `Application` (one per datasource) |
-| `collect_accounts` | `Account`, `ApplicationAccount` |
-| `collect_groups` | `Group`, `GroupMember`, `ApplicationGroup` |
-| `collect_application_roles` | `Role`, `AccountRole`, `ApplicationRole` |
-| `collect_owners` | `Person` |
+| `discovery_application_entity_collector` | `Application` (one per datasource) |
+| `discovery_account_entity_collector` | `Account`, `ApplicationAccount` |
+| `discovery_group_entity_collector` | `Group`, `GroupMember`, `ApplicationGroup` |
+| `discovery_application_role_entity_collector` | `Role`, `AccountRole`, `ApplicationRole` |
+| `discovery_owner_entity_collector` | `Person` |
 
 Credentials use the standard mesh **Grant credential**
 (`{client_id, client_secret}`) for the discovery `/auth/api` flow. The discovery

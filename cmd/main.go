@@ -12,12 +12,11 @@ func main() {
 	runner.Run(WithManifest())
 }
 
-// WithManifest builds the mesh-discovery provider manifest.
-//
-// The base mesh-discovery provider hosts the collector features below. The
-// orchestrator (added separately) reuses this same binary under dynamically
-// registered mesh-discovery-<platform> providers, baking a data_source_id into
-// each connector's options so each emits only its datasource's entities.
+// WithManifest builds the mesh-discovery provider manifest. A single discovery
+// connector emits one Application per discovered datasource and links
+// accounts/groups/roles to their application via the ApplicationAccount/
+// ApplicationGroup/ApplicationRole edges. Every feature needs only the discovery
+// base URL (option) plus the Grant credential.
 func WithManifest() *runner.Manifest {
 	manifest := runner.CreateManifest(
 		"mesh-discovery",
@@ -27,7 +26,7 @@ func WithManifest() *runner.Manifest {
 	)
 
 	manifest.MustRegisterFeature(
-		"collect_applications",
+		"discovery_application_entity_collector",
 		"Collect Applications",
 		"Emit one Application per discovered datasource (accounts/groups/roles link to these via edges).",
 		runner.FeatureSchedulable,
@@ -40,7 +39,7 @@ func WithManifest() *runner.Manifest {
 	)
 
 	manifest.MustRegisterFeature(
-		"collect_accounts",
+		"discovery_account_entity_collector",
 		"Collect Accounts",
 		"Collect discovery accounts and link them to their datasource application.",
 		runner.FeatureSchedulable,
@@ -53,9 +52,9 @@ func WithManifest() *runner.Manifest {
 	)
 
 	manifest.MustRegisterFeature(
-		"collect_groups",
+		"discovery_group_entity_collector",
 		"Collect Groups",
-		"Collect discovery groups and memberships, optionally scoped to a single datasource.",
+		"Collect discovery groups and memberships and link them to their datasource application.",
 		runner.FeatureSchedulable,
 		runner.FeatureTypeCollector,
 		new(options.GroupEntityCollectorOptions),
@@ -66,9 +65,9 @@ func WithManifest() *runner.Manifest {
 	)
 
 	manifest.MustRegisterFeature(
-		"collect_application_roles",
+		"discovery_application_role_entity_collector",
 		"Collect Application Roles",
-		"Collect discovery application roles (entitlements) and per-account role memberships.",
+		"Collect discovery application roles (entitlements), role memberships, and datasource links.",
 		runner.FeatureSchedulable,
 		runner.FeatureTypeCollector,
 		new(options.ApplicationRoleEntityCollectorOptions),
@@ -79,9 +78,9 @@ func WithManifest() *runner.Manifest {
 	)
 
 	manifest.MustRegisterFeature(
-		"collect_owners",
+		"discovery_owner_entity_collector",
 		"Collect Owners",
-		"Collect discovery owners (global identities) as Persons. Registered on the base provider only.",
+		"Collect discovery owners (global identities) as Persons.",
 		runner.FeatureSchedulable,
 		runner.FeatureTypeCollector,
 		new(options.OwnerEntityCollectorOptions),
