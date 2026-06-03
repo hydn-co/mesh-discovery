@@ -225,12 +225,13 @@ func derivedFeatureManifest() map[string]api.DeriveProviderFeature {
 	}
 	for _, name := range perDatasourceFeatures {
 		features[name] = api.DeriveProviderFeature{
-			DisplayName:    titles[name],
-			Type:           "collector",
-			ResumeBehavior: "none",
-			Schedulable:    true,
-			OptionsSchema:  schema,
-			Requirements:   []string{"discovery"},
+			DisplayName:        titles[name],
+			Type:               "collector",
+			ResumeBehavior:     "none",
+			SecretTemplateName: "Grant Credential",
+			Schedulable:        true,
+			OptionsSchema:      schema,
+			Requirements:       []string{"discovery"},
 		}
 	}
 	return features

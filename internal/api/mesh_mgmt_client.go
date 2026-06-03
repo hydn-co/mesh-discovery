@@ -45,13 +45,14 @@ func NewMeshMgmtClient(baseURL, clientID, clientSecret string) *MeshMgmtClient {
 
 // DeriveProviderFeature describes a feature on a derived provider.
 type DeriveProviderFeature struct {
-	DisplayName    string          `json:"display_name"`
-	Description    string          `json:"description,omitempty"`
-	Type           string          `json:"type"`
-	ResumeBehavior string          `json:"resume_behavior"`
-	Schedulable    bool            `json:"schedulable"`
-	OptionsSchema  json.RawMessage `json:"options_schema,omitempty"`
-	Requirements   []string        `json:"requirements,omitempty"`
+	DisplayName        string          `json:"display_name"`
+	Description        string          `json:"description,omitempty"`
+	Type               string          `json:"type"`
+	ResumeBehavior     string          `json:"resume_behavior"`
+	SecretTemplateName string          `json:"secret_template_name,omitempty"`
+	Schedulable        bool            `json:"schedulable"`
+	OptionsSchema      json.RawMessage `json:"options_schema,omitempty"`
+	Requirements       []string        `json:"requirements,omitempty"`
 }
 
 // DeriveProviderRequest registers a provider that reuses an existing executable.
