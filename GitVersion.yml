@@ -1,0 +1,21 @@
+# Common mesh connector repos use this branch map; keep the branch rules consistent even if a repo's top-level version settings vary.
+mode: ContinuousDeployment
+increment: Inherit
+prevent-increment:
+  when-current-commit-tagged: false
+semantic-version-format: Strict
+branches:
+  main:
+    regex: ^(?<BranchName>master|main)$
+  develop:
+    regex: ^(?<BranchName>dev(elop)?(ment)?)$
+    label: "alpha"
+  feature:
+    regex: ^features?[/-](?<BranchName>.+)
+    label: "{BranchName}"
+  pull-request:
+    regex: ^(pull-requests|pull|pr)[/-](?<BranchName>.+)
+    label: "{BranchName}"
+  unknown:
+    regex: (?<BranchName>.+)
+    label: "{BranchName}"

@@ -1,0 +1,25 @@
+name: Version
+on:
+  workflow_dispatch:
+  workflow_call:
+    outputs:
+      version:
+        description: "Calculated semantic version"
+        value: ${{ jobs.version.outputs.version }}
+      semver:
+        value: ${{ jobs.version.outputs.semver }}
+      majorMinorPatch:
+        value: ${{ jobs.version.outputs.majorMinorPatch }}
+      sha:
+        value: ${{ jobs.version.outputs.sha }}
+      fullSemVer:
+        value: ${{ jobs.version.outputs.fullSemVer }}
+      informationalVersion:
+        value: ${{ jobs.version.outputs.informationalVersion }}
+permissions:
+  contents: read
+jobs:
+  version:
+    uses: hydn-co/build-tools/.github/workflows/version.yml@main
+    permissions:
+      contents: read
