@@ -45,7 +45,11 @@ func (c *AccountEntityCollector) Start(ctx context.Context) error {
 
 	client := c.newClient(c.GetOptions().GetBaseURL(), clientID, clientSecret)
 
-	return client.ForEachAccountPage(ctx, func(page []api.Row, _, _ int) error {
+	// Pass 1: emit accounts + datasource links, indexing accounts by external id
+	// (for the attribute join) and bucketing them by datasource (for probing).
+	accountRefs := make(map[string]struct{})
+	byDatasource := make(map[string][]accountProbe)
+	if err := client.ForEachAccountPage(ctx, func(page []api.Row, _, _ int) error {
 		for _, row := range page {
 			account := mappings.MapAccount(row)
 			if account == nil {
@@ -56,12 +60,24 @@ func (c *AccountEntityCollector) Start(ctx context.Context) error {
 			}
 			// Link the account to its datasource application. Accounts carry the
 			// datasource id directly, so no name resolution is needed here.
-			if edge := mappings.NewApplicationAccount(mappings.DatasourceOf(row).ID, account.AccountRef); edge != nil {
+			dsID := mappings.DatasourceOf(row).ID
+			if edge := mappings.NewApplicationAccount(dsID, account.AccountRef); edge != nil {
 				if err := c.Emit(ctx, edge); err != nil {
 					return fmt.Errorf("emit application-account %s: %w", account.AccountRef, err)
 				}
 			}
+			accountRefs[account.AccountRef] = struct{}{}
+			if dsID != "" {
+				byDatasource[dsID] = append(byDatasource[dsID],
+					accountProbe{ref: account.AccountRef, accountType: mappings.AccountTypeRaw(row)})
+			}
 		}
 		return nil
-	})
+	}); err != nil {
+		return err
+	}
+
+	// Pass 2: collect each account's full attribute set and emit Attribute
+	// definitions + AccountAttribute value edges.
+	return collectAccountAttributes(ctx, c, client, accountRefs, byDatasource)
 }

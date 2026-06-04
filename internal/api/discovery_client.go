@@ -468,3 +468,31 @@ func (c *Client) FetchEntities(
 	}
 	return nil
 }
+
+// GetAccountDetails fetches a single entity record by datasource + external id
+// from the datastore. Used to probe the entity-type variants a datasource emits
+// (the response carries a "type" field). Mirrors control's hydden GetAccountDetails.
+func (c *Client) GetAccountDetails(ctx context.Context, dataSourceID, accountID string) (map[string]any, error) {
+	u := fmt.Sprintf("%s/internal/v1/datastore/entity/%s/%s", c.baseURL, dataSourceID, accountID)
+	resp, err := c.doAuthenticated(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("discovery GetAccountDetails returned status %d: %s", resp.StatusCode, string(b))
+	}
+	reader, err := decodeBody(resp)
+	if err != nil {
+		return nil, err
+	}
+	if reader != resp.Body {
+		defer func() { _ = reader.Close() }()
+	}
+	var out map[string]any
+	if err := json.NewDecoder(reader).Decode(&out); err != nil {
+		return nil, fmt.Errorf("decode discovery GetAccountDetails response: %w", err)
+	}
+	return out, nil
+}

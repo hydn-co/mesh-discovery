@@ -12,7 +12,12 @@ func (o *AccountEntityCollectorOptions) GetDiscriminator() string {
 }
 
 func (o *AccountEntityCollectorOptions) GetSpaces() []spaces.Space {
-	return []spaces.Space{spaces.Accounts, spaces.ApplicationAccounts}
+	return []spaces.Space{
+		spaces.Accounts,
+		spaces.ApplicationAccounts,
+		spaces.Attributes,
+		spaces.AccountAttributes,
+	}
 }
 
 func (o *AccountEntityCollectorOptions) GetRequirements() []string {

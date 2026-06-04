@@ -80,11 +80,23 @@ func (fakeDiscoveryClient) ForEachApplicationRolePage(_ context.Context, cb api.
 func (fakeDiscoveryClient) FetchEntities(
 	_ context.Context, _, entityType string, cb func(*api.FetchedEntity) error,
 ) error {
-	if entityType != "edge.role" {
+	switch entityType {
+	case "edge.role":
+		// edge.role: From = role external id, To = account external id.
+		return cb(&api.FetchedEntity{Type: "edge.role", From: "role-1", To: "acc-1"})
+	case "principal.account.user":
+		return cb(&api.FetchedEntity{
+			ID:     "acc-1",
+			Type:   entityType,
+			Entity: map[string]any{"department": "IT", "title": "Admin"},
+		})
+	default:
 		return nil
 	}
-	// edge.role: From = role external id, To = account external id.
-	return cb(&api.FetchedEntity{Type: "edge.role", From: "role-1", To: "acc-1"})
+}
+
+func (fakeDiscoveryClient) GetAccountDetails(_ context.Context, _, _ string) (map[string]any, error) {
+	return map[string]any{"type": "principal.account.user"}, nil
 }
 
 func newContractContext[T connector.FeatureOptions](
@@ -158,12 +170,30 @@ func TestShouldEmitAccountsAndApplicationLinksWhenAccountCollectorRuns(t *testin
 	}
 	runCollector(t, c)
 
-	assertEmittedEntityContract(t, emitter.emitted, []any{&entities.Account{}, &entities.ApplicationAccount{}},
-		(&options.AccountEntityCollectorOptions{}).GetSpaces())
+	assertEmittedEntityContract(t, emitter.emitted, []any{
+		&entities.Account{},
+		&entities.ApplicationAccount{},
+		&entities.Attribute{},
+		&entities.AccountAttribute{},
+	}, (&options.AccountEntityCollectorOptions{}).GetSpaces())
 
 	links := applicationAccountLinks(emitter.emitted)
 	require.Equal(t, "ds1", links["acc-1"])
 	require.Equal(t, "ds2", links["acc-3"])
+
+	// Attribute values land on AccountAttribute edges; distinct names as Attributes.
+	var attrVals, attrDefs int
+	for _, e := range emitter.emitted {
+		switch v := e.(type) {
+		case *entities.AccountAttribute:
+			require.Equal(t, "acc-1", v.AccountRef)
+			attrVals++
+		case *entities.Attribute:
+			attrDefs++
+		}
+	}
+	require.Positive(t, attrVals)
+	require.Positive(t, attrDefs)
 }
 
 func TestShouldEmitGroupsMembersAndApplicationLinksWhenGroupCollectorRuns(t *testing.T) {

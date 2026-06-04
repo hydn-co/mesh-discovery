@@ -16,6 +16,7 @@ type discoveryClient interface {
 	ForEachOwnerPage(ctx context.Context, cb api.PageFunc) error
 	ForEachApplicationRolePage(ctx context.Context, cb api.PageFunc) error
 	FetchEntities(ctx context.Context, dataSourceID, entityType string, cb func(*api.FetchedEntity) error) error
+	GetAccountDetails(ctx context.Context, dataSourceID, accountID string) (map[string]any, error)
 }
 
 // clientFactory builds a discoveryClient; swapped in tests via the collector's

@@ -41,7 +41,7 @@ func WithManifest() *runner.Manifest {
 	manifest.MustRegisterFeature(
 		"discovery_account_entity_collector",
 		"Collect Accounts",
-		"Collect discovery accounts and link them to their datasource application.",
+		"Collect discovery accounts, their full attribute set, and links to their datasource application.",
 		runner.FeatureSchedulable,
 		runner.FeatureTypeCollector,
 		new(options.AccountEntityCollectorOptions),

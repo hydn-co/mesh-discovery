@@ -26,10 +26,16 @@ See [PLAN.md](PLAN.md) for the design and rationale.
 | Feature | Emits |
 |---|---|
 | `discovery_application_entity_collector` | `Application` (one per datasource) |
-| `discovery_account_entity_collector` | `Account`, `ApplicationAccount` |
+| `discovery_account_entity_collector` | `Account`, `ApplicationAccount`, `Attribute`, `AccountAttribute` |
 | `discovery_group_entity_collector` | `Group`, `GroupMember`, `ApplicationGroup` |
 | `discovery_application_role_entity_collector` | `Role`, `AccountRole`, `ApplicationRole` |
 | `discovery_owner_entity_collector` | `Person` |
+
+Account **attributes** are collected by streaming each datasource's full entity
+records via `/internal/v1/datastore/fetch` (the connector probes the datasource's
+entity-type variants, then flattens each record): distinct attribute names become
+`Attribute` entities and per-account values are stored on `AccountAttribute`
+edges. Group attributes are deferred — the SDK has no `GroupAttribute` edge yet.
 
 Credentials use the standard mesh **Grant credential**
 (`{client_id, client_secret}`) for the discovery `/auth/api` flow. The discovery
