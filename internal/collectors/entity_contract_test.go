@@ -12,6 +12,7 @@ import (
 	"github.com/hydn-co/mesh-sdk/pkg/catalog/spaces"
 	"github.com/hydn-co/mesh-sdk/pkg/catalog/types"
 	"github.com/hydn-co/mesh-sdk/pkg/connector"
+	"github.com/hydn-co/mesh-sdk/pkg/connectorutil"
 	"github.com/stretchr/testify/require"
 
 	"github.com/hydn-co/mesh-discovery/internal/api"
@@ -113,7 +114,7 @@ func newContractContext[T connector.FeatureOptions](
 				TenantID:    uuid.MustParse("11111111-1111-1111-1111-111111111111"),
 				ConnectorID: uuid.MustParse("22222222-2222-2222-2222-222222222222"),
 				Options:     polymorphic.NewEnvelope(featureOptions),
-				Credentials: creds,
+				Credentials: map[string]json.RawMessage{connectorutil.DefaultCredentialName: creds},
 			}),
 			connector.WithEmitter(emitter),
 		),

@@ -9,7 +9,7 @@ import (
 )
 
 // ExtractClientCredentials returns the discovery client id and secret from a
-// mesh Grant credential.
-func ExtractClientCredentials(raw json.RawMessage) (clientID, clientSecret string, err error) {
-	return connectorutil.ExtractGrantCredential(raw)
+// feature's credential map, reading the default Grant credential slot.
+func ExtractClientCredentials(creds map[string]json.RawMessage) (clientID, clientSecret string, err error) {
+	return connectorutil.ExtractGrantCredentialFrom(creds, connectorutil.DefaultCredentialName)
 }
