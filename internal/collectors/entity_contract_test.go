@@ -216,7 +216,7 @@ func TestShouldEmitGroupsMembersAndApplicationLinksWhenGroupCollectorRuns(t *tes
 	assertEmittedEntityContract(t, emitter.emitted,
 		[]any{
 			&entities.Group{}, &entities.GroupMember{}, &entities.ApplicationGroup{},
-			&entities.GroupAttribute{},
+			&entities.Attribute{}, &entities.GroupAttribute{},
 		},
 		(&options.GroupEntityCollectorOptions{}).GetSpaces())
 
@@ -237,7 +237,7 @@ func TestShouldEmitPersonsWhenOwnerCollectorRuns(t *testing.T) {
 	runCollector(t, c)
 
 	assertEmittedEntityContract(t, emitter.emitted,
-		[]any{&entities.Person{}, &entities.PersonAttribute{}},
+		[]any{&entities.Person{}, &entities.Attribute{}, &entities.PersonAttribute{}},
 		(&options.OwnerEntityCollectorOptions{}).GetSpaces())
 }
 
@@ -304,8 +304,23 @@ func assertEmittedEntityContract(t *testing.T, emitted, allowedTypes []any, expe
 	}
 
 	require.ElementsMatch(t, allowedList, keys(observedTypes))
-	require.ElementsMatch(t, expectedSpaces, spaceKeys(observedSpaces))
+
+	// The attribute-definition dictionary ("attributes") is additive: collectors
+	// emit it but do not declare it as owned. Exempt it from the declared==emitted
+	// check; declared (owned) spaces must still match the remaining emitted spaces.
+	nonAdditive := make([]spaces.Space, 0, len(observedSpaces))
+	for space := range observedSpaces {
+		if _, additive := additiveContractSpaces[space]; additive {
+			continue
+		}
+		nonAdditive = append(nonAdditive, space)
+	}
+	require.ElementsMatch(t, expectedSpaces, nonAdditive)
 }
+
+// additiveContractSpaces are emitted-but-not-declared dictionary spaces (see
+// mesh-core internal/catalog/spaces.IsAdditive).
+var additiveContractSpaces = map[spaces.Space]struct{}{spaces.Attributes: {}}
 
 func emittedEntitySpace(item any) (spaces.Space, bool) {
 	e, ok := item.(interface{ GetMetadata() types.EntityMetadata })
@@ -317,14 +332,6 @@ func emittedEntitySpace(item any) (spaces.Space, bool) {
 
 func keys(m map[string]struct{}) []string {
 	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	return out
-}
-
-func spaceKeys(m map[spaces.Space]struct{}) []spaces.Space {
-	out := make([]spaces.Space, 0, len(m))
 	for k := range m {
 		out = append(out, k)
 	}

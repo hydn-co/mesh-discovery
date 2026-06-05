@@ -176,14 +176,20 @@ no `RoleAttribute`. Left as a follow-up if role enrichment is required.
 
 The **account collector** emits the account-scoped graph: `Account`, `AccountAttribute`, plus the
 `Attribute` / `RiskFactor` / `Classification` definitions and the `AccountRiskFactor` /
-`AccountClassification` edges. The **group** and **owner** collectors emit their entity + their
-attribute value edges (`GroupAttribute` / `PersonAttribute`).
+`AccountClassification` edges. The **group** and **owner** collectors emit their entity, their
+attribute value edges (`GroupAttribute` / `PersonAttribute`), and the `Attribute` definitions for
+those values. All three handle attributes identically (named `Attribute` definition + value edge).
 
-**The `Attribute` definition dictionary (`attributes` space) is owned solely by the account
-collector.** mesh-sdk allows one collector per space, and — more importantly — two collectors
-writing the same space would merkle-prune each other's entries on every sync. So group and owner
-attributes emit value edges only; their `attribute_ref`s are self-describing keys (a definition
-entry is created when the same key also appears on an account). See `emitNamedAttributes`.
+**The `Attribute` definition dictionary (`attributes` space) is additive and shared.** All three
+collectors emit the named `Attribute` definition for every attribute they set, plus the typed value
+edge. None of them *declares* `attributes` in `GetSpaces()`: a declared space is one the collector
+owns and fully reconciles (absent refs get pruned), whereas the dictionary must accumulate across
+collectors. Because `attributes` is never declared, it never enters `OwnedSpaces`, so mesh-core
+treats it as additive — emitted definitions are upserted but never pruned by a connector run
+(reinforced by `spaces.IsAdditive` on the mesh-core side). Multiple collectors emitting the same
+definition is safe and idempotent (identical ref + content hash). Stale definitions (no remaining
+referencing edge) are reclaimed out-of-band by mesh-core's daily attribute-dictionary pruner. See
+`emitNamedAttributes`.
 
 **Attribute sources.** Account and group attributes come from two places: the discovery grid (the
 computed/enriched columns) **and** the per-datasource datastore fetch

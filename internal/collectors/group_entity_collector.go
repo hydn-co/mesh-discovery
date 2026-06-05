@@ -54,11 +54,11 @@ func (c *GroupEntityCollector) Start(ctx context.Context) error {
 
 	// Pass 1: emit groups, application links, and grid-derived attributes. Index
 	// groups by external id (for the fetch join) and bucket them by datasource id
-	// (for entity-type probing). Group attribute value edges are emitted without
-	// Attribute definitions — the account collector solely owns the shared
-	// "attributes" dictionary space (see emitNamedAttributes).
+	// (for entity-type probing). seenAttr dedupes the Attribute definitions this
+	// run emits into the additive "attributes" dictionary (shared, never pruned).
 	groupRefs := make(map[string]struct{})
 	byDatasource := make(map[string][]string)
+	seenAttr := make(map[string]struct{})
 	if err := client.ForEachGroupPage(ctx, func(page []api.Row, _, _ int) error {
 		for _, row := range page {
 			group := mappings.MapGroup(row)
@@ -80,7 +80,7 @@ func (c *GroupEntityCollector) Start(ctx context.Context) error {
 				ctx,
 				c,
 				mappings.GroupGSAttributes(row),
-				nil,
+				seenAttr,
 				func(name, value string) any { return mappings.NewGroupAttribute(group.GroupRef, name, value) },
 			); err != nil {
 				return err
@@ -112,6 +112,6 @@ func (c *GroupEntityCollector) Start(ctx context.Context) error {
 	}
 
 	// Pass 3: collect each group's full (native) attribute set from the datastore
-	// and emit GroupAttribute value edges.
-	return collectGroupAttributes(ctx, c, client, groupRefs, byDatasource)
+	// and emit Attribute definitions + GroupAttribute value edges.
+	return collectGroupAttributes(ctx, c, client, groupRefs, byDatasource, seenAttr)
 }

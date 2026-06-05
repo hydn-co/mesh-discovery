@@ -22,6 +22,7 @@ func collectGroupAttributes(
 	client discoveryClient,
 	groupRefs map[string]struct{},
 	byDatasource map[string][]string,
+	seenAttr map[string]struct{},
 ) error {
 	for dsID, groupIDs := range byDatasource {
 		if err := ctx.Err(); err != nil {
@@ -38,7 +39,7 @@ func collectGroupAttributes(
 			if _, ok := groupRefs[e.ID]; !ok {
 				return nil
 			}
-			return emitNamedAttributes(ctx, emitter, mappings.FlattenFetchedEntity(e), nil,
+			return emitNamedAttributes(ctx, emitter, mappings.FlattenFetchedEntity(e), seenAttr,
 				func(name, value string) any { return mappings.NewGroupAttribute(e.ID, name, value) })
 		})
 		if err != nil {

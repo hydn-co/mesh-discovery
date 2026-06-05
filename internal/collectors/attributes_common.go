@@ -9,16 +9,17 @@ import (
 	"github.com/hydn-co/mesh-discovery/internal/mappings"
 )
 
-// emitNamedAttributes emits one value edge per name/value pair produced by
-// mkEdge (the per-entity AccountAttribute / GroupAttribute / PersonAttribute).
-// mkEdge must not return a nil pointer for the names passed here.
+// emitNamedAttributes emits, for each name/value pair, the named Attribute
+// definition (the dictionary entry) and the per-entity value edge produced by
+// mkEdge (AccountAttribute / GroupAttribute / PersonAttribute). mkEdge must not
+// return a nil pointer for the names passed here.
 //
-// When seen is non-nil it also emits an Attribute definition the first time each
-// name is observed (deduped across an entity's grid + fetched-record passes).
-// The shared "attributes" definition space can have only one owning collector
-// (otherwise the collectors would merkle-prune each other's dictionary), so the
-// account collector passes a set and owns the dictionary while the group and
-// owner collectors pass nil and emit value edges only.
+// seen dedupes the Attribute definitions within a single collector run (the same
+// name recurs across entities and across an entity's grid + fetched-record
+// passes). All three collectors emit definitions: "attributes" is an additive
+// dictionary space — it is never declared as owned and never pruned by
+// reconcile, so multiple collectors emitting the same definition is safe and
+// idempotent (identical ref + content hash). Pass nil to emit value edges only.
 func emitNamedAttributes(
 	ctx context.Context,
 	emitter connector.EntityEmitter,

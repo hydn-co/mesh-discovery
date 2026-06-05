@@ -49,10 +49,11 @@ func (c *OwnerEntityCollector) Start(ctx context.Context) error {
 
 	// Owners are global identities, not per-datasource datastore entities, so the
 	// owner feed itself carries the full person object. Each owner row is emitted
-	// as a Person, and its remaining fields are folded into PersonAttribute value
-	// edges (same flatten/emit pattern as the account and group attribute passes).
-	// Attribute definitions are owned solely by the account collector, so person
-	// attributes emit value edges only (nil dedupe set).
+	// as a Person, and its remaining fields are folded into Attribute definitions
+	// + PersonAttribute value edges (same flatten/emit pattern as the account and
+	// group attribute passes). seenAttr dedupes the definitions this run emits
+	// into the additive "attributes" dictionary.
+	seenAttr := make(map[string]struct{})
 	return client.ForEachOwnerPage(ctx, func(page []api.Row, _, _ int) error {
 		for _, row := range page {
 			person := mappings.MapOwner(row)
@@ -66,7 +67,7 @@ func (c *OwnerEntityCollector) Start(ctx context.Context) error {
 				ctx,
 				c,
 				mappings.PersonGSAttributes(row),
-				nil,
+				seenAttr,
 				func(name, value string) any { return mappings.NewPersonAttribute(person.PersonRef, name, value) },
 			); err != nil {
 				return err

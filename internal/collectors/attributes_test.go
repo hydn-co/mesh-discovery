@@ -87,7 +87,7 @@ func TestShouldEmitAccountAttributeDefinitionsAndValues(t *testing.T) {
 	assert.Positive(t, vals)
 }
 
-func TestShouldEmitGroupAttributeValuesWithoutOwningDictionary(t *testing.T) {
+func TestShouldEmitGroupAttributeDefinitionsAndValues(t *testing.T) {
 	emitter := &captureEntityEmitter{}
 	c := &GroupEntityCollector{
 		TypedFeatureContext: newContractContext(t, emitter,
@@ -96,13 +96,14 @@ func TestShouldEmitGroupAttributeValuesWithoutOwningDictionary(t *testing.T) {
 	}
 	runCollector(t, c)
 
+	defs := map[string]struct{}{}
 	var values []*entities.GroupAttribute
 	for _, e := range emitter.emitted {
 		switch v := e.(type) {
 		case *entities.GroupAttribute:
 			values = append(values, v)
 		case *entities.Attribute:
-			t.Fatalf("group collector must not emit Attribute definitions (account owns the dictionary)")
+			defs[v.AttributeRef] = struct{}{}
 		}
 	}
 
@@ -115,9 +116,12 @@ func TestShouldEmitGroupAttributeValuesWithoutOwningDictionary(t *testing.T) {
 		byGroup[v.GroupRef][v.AttributeRef] = v.Value
 	}
 	assert.Equal(t, "corp", byGroup["grp-1"]["Group Domain"])
+	// The group collector emits the named definition for each attribute it sets.
+	_, ok := defs["Group Domain"]
+	assert.True(t, ok, "group collector emits the Attribute definition for Group Domain")
 }
 
-func TestShouldEmitPersonAttributeValuesWithoutOwningDictionary(t *testing.T) {
+func TestShouldEmitPersonAttributeDefinitionsAndValues(t *testing.T) {
 	emitter := &captureEntityEmitter{}
 	c := &OwnerEntityCollector{
 		TypedFeatureContext: newContractContext(t, emitter,
@@ -126,13 +130,14 @@ func TestShouldEmitPersonAttributeValuesWithoutOwningDictionary(t *testing.T) {
 	}
 	runCollector(t, c)
 
+	defs := map[string]struct{}{}
 	var values []*entities.PersonAttribute
 	for _, e := range emitter.emitted {
 		switch v := e.(type) {
 		case *entities.PersonAttribute:
 			values = append(values, v)
 		case *entities.Attribute:
-			t.Fatalf("owner collector must not emit Attribute definitions (account owns the dictionary)")
+			defs[v.AttributeRef] = struct{}{}
 		}
 	}
 
@@ -145,4 +150,6 @@ func TestShouldEmitPersonAttributeValuesWithoutOwningDictionary(t *testing.T) {
 		}
 	}
 	assert.True(t, found, "owner's Department field becomes a PersonAttribute")
+	_, ok := defs["Department"]
+	assert.True(t, ok, "owner collector emits the Attribute definition for Department")
 }
