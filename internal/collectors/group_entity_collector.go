@@ -52,7 +52,13 @@ func (c *GroupEntityCollector) Start(ctx context.Context) error {
 		return fmt.Errorf("build datasource index: %w", err)
 	}
 
-	// Pass 1: emit groups + application links.
+	// Pass 1: emit groups, application links, and grid-derived attributes. Index
+	// groups by external id (for the fetch join) and bucket them by datasource id
+	// (for entity-type probing). Group attribute value edges are emitted without
+	// Attribute definitions — the account collector solely owns the shared
+	// "attributes" dictionary space (see emitNamedAttributes).
+	groupRefs := make(map[string]struct{})
+	byDatasource := make(map[string][]string)
 	if err := client.ForEachGroupPage(ctx, func(page []api.Row, _, _ int) error {
 		for _, row := range page {
 			group := mappings.MapGroup(row)
@@ -62,12 +68,26 @@ func (c *GroupEntityCollector) Start(ctx context.Context) error {
 			if err := c.Emit(ctx, group); err != nil {
 				return fmt.Errorf("emit group %s: %w", group.GroupRef, err)
 			}
-			if appRef := appIDByName[mappings.GroupDatasourceName(row)]; appRef != "" {
-				if edge := mappings.NewApplicationGroup(appRef, group.GroupRef); edge != nil {
+			dsID := appIDByName[mappings.GroupDatasourceName(row)]
+			if dsID != "" {
+				if edge := mappings.NewApplicationGroup(dsID, group.GroupRef); edge != nil {
 					if err := c.Emit(ctx, edge); err != nil {
 						return fmt.Errorf("emit application-group %s: %w", group.GroupRef, err)
 					}
 				}
+			}
+			if err := emitNamedAttributes(
+				ctx,
+				c,
+				mappings.GroupGSAttributes(row),
+				nil,
+				func(name, value string) any { return mappings.NewGroupAttribute(group.GroupRef, name, value) },
+			); err != nil {
+				return err
+			}
+			groupRefs[group.GroupRef] = struct{}{}
+			if dsID != "" {
+				byDatasource[dsID] = append(byDatasource[dsID], group.GroupRef)
 			}
 		}
 		return nil
@@ -76,7 +96,7 @@ func (c *GroupEntityCollector) Start(ctx context.Context) error {
 	}
 
 	// Pass 2: emit memberships.
-	return client.ForEachGroupMembershipPage(ctx, func(page []api.Row, _, _ int) error {
+	if err := client.ForEachGroupMembershipPage(ctx, func(page []api.Row, _, _ int) error {
 		for _, row := range page {
 			member := mappings.MapGroupMember(row)
 			if member == nil {
@@ -87,5 +107,11 @@ func (c *GroupEntityCollector) Start(ctx context.Context) error {
 			}
 		}
 		return nil
-	})
+	}); err != nil {
+		return err
+	}
+
+	// Pass 3: collect each group's full (native) attribute set from the datastore
+	// and emit GroupAttribute value edges.
+	return collectGroupAttributes(ctx, c, client, groupRefs, byDatasource)
 }

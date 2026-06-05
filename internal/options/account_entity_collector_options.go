@@ -17,6 +17,10 @@ func (o *AccountEntityCollectorOptions) GetSpaces() []spaces.Space {
 		spaces.ApplicationAccounts,
 		spaces.Attributes,
 		spaces.AccountAttributes,
+		spaces.RiskFactors,
+		spaces.AccountRiskFactors,
+		spaces.Classifications,
+		spaces.AccountClassifications,
 	}
 }
 

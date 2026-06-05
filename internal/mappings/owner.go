@@ -25,5 +25,11 @@ func MapOwner(row api.Row) *entities.Person {
 	if email := firstNonEmpty(row, "Identity Email", "Email"); email != "" {
 		person.PrimaryEmail = &types.Email{Address: email}
 	}
+	if alt := getString(row, "Alt Email"); alt != "" {
+		person.AlternateEmails = []*types.Email{{Address: alt}}
+	}
+	if phone := firstNonEmpty(row, "Mobile Phone", "Phone"); phone != "" {
+		person.PrimaryPhone = &types.Phone{Number: phone}
+	}
 	return person
 }

@@ -2,11 +2,19 @@ package main
 
 import (
 	"github.com/hydn-co/mesh-sdk/pkg/connector"
+	"github.com/hydn-co/mesh-sdk/pkg/connectorutil"
 	"github.com/hydn-co/mesh-sdk/pkg/runner"
 
 	"github.com/hydn-co/mesh-discovery/internal/collectors"
 	"github.com/hydn-co/mesh-discovery/internal/options"
 )
+
+// grantCredential declares the single discovery Grant credential every feature
+// needs, bound to the canonical default slot (mesh-sdk v0.2.71+ keys
+// credentials by slot name).
+var grantCredential = []runner.CredentialRequirement{
+	{Name: connectorutil.DefaultCredentialName, TemplateName: runner.GrantCredential},
+}
 
 func main() {
 	runner.Run(WithManifest())
@@ -34,7 +42,7 @@ func WithManifest() *runner.Manifest {
 		new(options.ApplicationEntityCollectorOptions),
 		(*connector.NoPayload)(nil),
 		runner.FeatureResumeBehaviorNone,
-		runner.GrantCredential,
+		grantCredential,
 		runner.Factory(collectors.NewApplicationEntityCollector),
 	)
 
@@ -47,7 +55,7 @@ func WithManifest() *runner.Manifest {
 		new(options.AccountEntityCollectorOptions),
 		(*connector.NoPayload)(nil),
 		runner.FeatureResumeBehaviorNone,
-		runner.GrantCredential,
+		grantCredential,
 		runner.Factory(collectors.NewAccountEntityCollector),
 	)
 
@@ -60,7 +68,7 @@ func WithManifest() *runner.Manifest {
 		new(options.GroupEntityCollectorOptions),
 		(*connector.NoPayload)(nil),
 		runner.FeatureResumeBehaviorNone,
-		runner.GrantCredential,
+		grantCredential,
 		runner.Factory(collectors.NewGroupEntityCollector),
 	)
 
@@ -73,7 +81,7 @@ func WithManifest() *runner.Manifest {
 		new(options.ApplicationRoleEntityCollectorOptions),
 		(*connector.NoPayload)(nil),
 		runner.FeatureResumeBehaviorNone,
-		runner.GrantCredential,
+		grantCredential,
 		runner.Factory(collectors.NewApplicationRoleEntityCollector),
 	)
 
@@ -86,7 +94,7 @@ func WithManifest() *runner.Manifest {
 		new(options.OwnerEntityCollectorOptions),
 		(*connector.NoPayload)(nil),
 		runner.FeatureResumeBehaviorNone,
-		runner.GrantCredential,
+		grantCredential,
 		runner.Factory(collectors.NewOwnerEntityCollector),
 	)
 

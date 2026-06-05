@@ -12,6 +12,7 @@ import (
 	"github.com/hydn-co/mesh-sdk/pkg/catalog/spaces"
 	"github.com/hydn-co/mesh-sdk/pkg/catalog/types"
 	"github.com/hydn-co/mesh-sdk/pkg/connector"
+	"github.com/hydn-co/mesh-sdk/pkg/connectorutil"
 	"github.com/stretchr/testify/require"
 
 	"github.com/hydn-co/mesh-discovery/internal/api"
@@ -38,6 +39,9 @@ func (fakeDiscoveryClient) ForEachAccountPage(_ context.Context, cb api.PageFunc
 			"Id": "acc-1", "Account Name": "Alice", "Email": "alice@ds1.example",
 			"Account Type": "User", "Data Source Id": "ds1",
 			"Data Source Name": "ds1-name", "Data Source Platform": "AD",
+			// Drives a risk factor, a classification, and a grid attribute.
+			"Accounts with MFA Not Enabled": "5", "Classifications": "Admin",
+			"Department": "IT",
 		},
 		{
 			"Id": "acc-2", "Account Name": "svc", "Account Type": "Service Account",
@@ -52,8 +56,8 @@ func (fakeDiscoveryClient) ForEachAccountPage(_ context.Context, cb api.PageFunc
 
 func (fakeDiscoveryClient) ForEachGroupPage(_ context.Context, cb api.PageFunc) error {
 	return cb([]api.Row{
-		{"Group Id": "grp-1", "Group Name": "Admins", "Data Source Name": "ds1-name"},
-		{"Group Id": "grp-2", "Group Name": "Others", "Data Source Name": "ds2-name"},
+		{"Group Id": "grp-1", "Group Name": "Admins", "Data Source Name": "ds1-name", "Group Domain": "corp"},
+		{"Group Id": "grp-2", "Group Name": "Others", "Data Source Name": "ds2-name", "Group Domain": "corp"},
 	}, 1, 2)
 }
 
@@ -66,7 +70,7 @@ func (fakeDiscoveryClient) ForEachGroupMembershipPage(_ context.Context, cb api.
 
 func (fakeDiscoveryClient) ForEachOwnerPage(_ context.Context, cb api.PageFunc) error {
 	return cb([]api.Row{
-		{"Identity Id": "own-1", "Identity Name": "Owner One", "Identity Email": "owner1@example"},
+		{"Identity Id": "own-1", "Identity Name": "Owner One", "Identity Email": "owner1@example", "Department": "IT"},
 	}, 1, 1)
 }
 
@@ -113,7 +117,7 @@ func newContractContext[T connector.FeatureOptions](
 				TenantID:    uuid.MustParse("11111111-1111-1111-1111-111111111111"),
 				ConnectorID: uuid.MustParse("22222222-2222-2222-2222-222222222222"),
 				Options:     polymorphic.NewEnvelope(featureOptions),
-				Credentials: creds,
+				Credentials: map[string]json.RawMessage{connectorutil.DefaultCredentialName: creds},
 			}),
 			connector.WithEmitter(emitter),
 		),
@@ -175,6 +179,10 @@ func TestShouldEmitAccountsAndApplicationLinksWhenAccountCollectorRuns(t *testin
 		&entities.ApplicationAccount{},
 		&entities.Attribute{},
 		&entities.AccountAttribute{},
+		&entities.RiskFactor{},
+		&entities.AccountRiskFactor{},
+		&entities.Classification{},
+		&entities.AccountClassification{},
 	}, (&options.AccountEntityCollectorOptions{}).GetSpaces())
 
 	links := applicationAccountLinks(emitter.emitted)
@@ -206,7 +214,10 @@ func TestShouldEmitGroupsMembersAndApplicationLinksWhenGroupCollectorRuns(t *tes
 	runCollector(t, c)
 
 	assertEmittedEntityContract(t, emitter.emitted,
-		[]any{&entities.Group{}, &entities.GroupMember{}, &entities.ApplicationGroup{}},
+		[]any{
+			&entities.Group{}, &entities.GroupMember{}, &entities.ApplicationGroup{},
+			&entities.GroupAttribute{},
+		},
 		(&options.GroupEntityCollectorOptions{}).GetSpaces())
 
 	for _, e := range emitter.emitted {
@@ -225,7 +236,8 @@ func TestShouldEmitPersonsWhenOwnerCollectorRuns(t *testing.T) {
 	}
 	runCollector(t, c)
 
-	assertEmittedEntityContract(t, emitter.emitted, []any{&entities.Person{}},
+	assertEmittedEntityContract(t, emitter.emitted,
+		[]any{&entities.Person{}, &entities.PersonAttribute{}},
 		(&options.OwnerEntityCollectorOptions{}).GetSpaces())
 }
 

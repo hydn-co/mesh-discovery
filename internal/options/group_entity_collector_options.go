@@ -13,7 +13,12 @@ func (o *GroupEntityCollectorOptions) GetDiscriminator() string {
 }
 
 func (o *GroupEntityCollectorOptions) GetSpaces() []spaces.Space {
-	return []spaces.Space{spaces.Groups, spaces.GroupMembers, spaces.ApplicationGroups}
+	return []spaces.Space{
+		spaces.Groups,
+		spaces.GroupMembers,
+		spaces.ApplicationGroups,
+		spaces.GroupAttributes,
+	}
 }
 
 func (o *GroupEntityCollectorOptions) GetRequirements() []string {
