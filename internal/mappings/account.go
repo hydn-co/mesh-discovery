@@ -34,20 +34,41 @@ func MapAccount(row api.Row) *entities.Account {
 		name = accountRef
 	}
 
+	status := getString(row, "Status")
 	account := &entities.Account{
-		Metadata:    types.EntityMetadata{Space: spaces.Accounts},
-		AccountRef:  accountRef,
-		AccountType: mapAccountType(getString(row, "Account Type")),
-		Name:        name,
-		DisplayName: getString(row, "Display Name"),
-		Enabled:     accountEnabled(getString(row, "Status")),
-		CreatedAt:   parseEpochMillis(getString(row, "Created")),
+		Metadata:      types.EntityMetadata{Space: spaces.Accounts},
+		AccountRef:    accountRef,
+		AccountType:   mapAccountType(getString(row, "Account Type")),
+		Name:          name,
+		DisplayName:   getString(row, "Display Name"),
+		UPN:           getString(row, "UPN"),
+		Enabled:       accountEnabled(status),
+		Status:        mapAccountStatus(status),
+		CreatedAt:     parseEpochMillis(getString(row, "Created")),
+		LastLoginDate: parseEpochMillis(getString(row, "Last Logon")),
+		DisabledDate:  parseEpochMillis(getString(row, "Disabled Time")),
 	}
 
 	if email := getString(row, "Email"); email != "" {
 		account.PrimaryEmail = &types.Email{Address: email}
 	}
 	return account
+}
+
+// mapAccountStatus maps a free-text Hydden status to the catalog AccountStatus
+// enum. An empty status yields the zero value (omitted on the wire); anything
+// not clearly enabled/disabled is recorded as "other" so the signal isn't lost.
+func mapAccountStatus(status string) types.AccountStatus {
+	switch strings.ToLower(strings.TrimSpace(status)) {
+	case "":
+		return ""
+	case "enabled", "active", "enable", "ok":
+		return types.AccountStatusEnabled
+	case "disabled", "inactive", "deactivated", "suspended", "deleted", "disable":
+		return types.AccountStatusDisabled
+	default:
+		return types.AccountStatusOther
+	}
 }
 
 // mapAccountType maps a free-text Hydden account type to the catalog enum.

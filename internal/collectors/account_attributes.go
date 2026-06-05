@@ -33,8 +33,8 @@ func collectAccountAttributes(
 	client discoveryClient,
 	accountRefs map[string]struct{},
 	byDatasource map[string][]accountProbe,
+	seenAttr map[string]struct{},
 ) error {
-	seenAttr := make(map[string]struct{})
 	for dsID, probes := range byDatasource {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -61,29 +61,15 @@ func collectAccountAttributes(
 }
 
 // emitAttributes flattens one fetched record and emits its attribute definitions
-// (once each) and the account's attribute values.
+// (once each, via the shared dedupe set) and the account's attribute values.
 func emitAttributes(
 	ctx context.Context,
 	emitter connector.EntityEmitter,
 	e *api.FetchedEntity,
 	seenAttr map[string]struct{},
 ) error {
-	for name, value := range mappings.FlattenFetchedEntity(e) {
-		if _, ok := seenAttr[name]; !ok {
-			seenAttr[name] = struct{}{}
-			if attr := mappings.NewAttribute(name); attr != nil {
-				if err := emitter.Emit(ctx, attr); err != nil {
-					return fmt.Errorf("emit attribute %s: %w", name, err)
-				}
-			}
-		}
-		if edge := mappings.NewAccountAttribute(e.ID, name, value); edge != nil {
-			if err := emitter.Emit(ctx, edge); err != nil {
-				return fmt.Errorf("emit account attribute %s/%s: %w", e.ID, name, err)
-			}
-		}
-	}
-	return nil
+	return emitNamedAttributes(ctx, emitter, mappings.FlattenFetchedEntity(e), seenAttr,
+		func(name, value string) any { return mappings.NewAccountAttribute(e.ID, name, value) })
 }
 
 // discoverEntityTypes probes one account per distinct AccountType (capped) and

@@ -14,7 +14,7 @@ func (o *OwnerEntityCollectorOptions) GetDiscriminator() string {
 }
 
 func (o *OwnerEntityCollectorOptions) GetSpaces() []spaces.Space {
-	return []spaces.Space{spaces.Persons}
+	return []spaces.Space{spaces.Persons, spaces.PersonAttributes}
 }
 
 func (o *OwnerEntityCollectorOptions) GetRequirements() []string {
