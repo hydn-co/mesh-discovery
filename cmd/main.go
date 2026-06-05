@@ -9,10 +9,9 @@ import (
 	"github.com/hydn-co/mesh-discovery/internal/options"
 )
 
-// grantCredential declares the single discovery Grant credential every feature
-// needs, bound to the canonical default slot (mesh-sdk v0.2.71+ keys
-// credentials by slot name).
-var grantCredential = []runner.CredentialRequirement{
+// discoveryCredentials declares the single Grant credential every feature uses
+// for the discovery API.
+var discoveryCredentials = []runner.CredentialRequirement{
 	{Name: connectorutil.DefaultCredentialName, TemplateName: runner.GrantCredential},
 }
 
@@ -42,7 +41,7 @@ func WithManifest() *runner.Manifest {
 		new(options.ApplicationEntityCollectorOptions),
 		(*connector.NoPayload)(nil),
 		runner.FeatureResumeBehaviorNone,
-		grantCredential,
+		discoveryCredentials,
 		runner.Factory(collectors.NewApplicationEntityCollector),
 	)
 
@@ -55,7 +54,7 @@ func WithManifest() *runner.Manifest {
 		new(options.AccountEntityCollectorOptions),
 		(*connector.NoPayload)(nil),
 		runner.FeatureResumeBehaviorNone,
-		grantCredential,
+		discoveryCredentials,
 		runner.Factory(collectors.NewAccountEntityCollector),
 	)
 
@@ -68,7 +67,7 @@ func WithManifest() *runner.Manifest {
 		new(options.GroupEntityCollectorOptions),
 		(*connector.NoPayload)(nil),
 		runner.FeatureResumeBehaviorNone,
-		grantCredential,
+		discoveryCredentials,
 		runner.Factory(collectors.NewGroupEntityCollector),
 	)
 
@@ -81,7 +80,7 @@ func WithManifest() *runner.Manifest {
 		new(options.ApplicationRoleEntityCollectorOptions),
 		(*connector.NoPayload)(nil),
 		runner.FeatureResumeBehaviorNone,
-		grantCredential,
+		discoveryCredentials,
 		runner.Factory(collectors.NewApplicationRoleEntityCollector),
 	)
 
@@ -94,7 +93,7 @@ func WithManifest() *runner.Manifest {
 		new(options.OwnerEntityCollectorOptions),
 		(*connector.NoPayload)(nil),
 		runner.FeatureResumeBehaviorNone,
-		grantCredential,
+		discoveryCredentials,
 		runner.Factory(collectors.NewOwnerEntityCollector),
 	)
 

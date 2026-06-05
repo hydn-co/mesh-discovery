@@ -8,10 +8,8 @@ import (
 	"github.com/hydn-co/mesh-sdk/pkg/connectorutil"
 )
 
-// ExtractClientCredentials returns the discovery client id and secret from the
-// feature's default mesh Grant credential slot. mesh-sdk v0.2.71+ keys
-// credentials by slot name; a single-credential feature resolves under
-// connectorutil.DefaultCredentialName.
+// ExtractClientCredentials returns the discovery client id and secret from a
+// feature's credential map, reading the default Grant credential slot.
 func ExtractClientCredentials(creds map[string]json.RawMessage) (clientID, clientSecret string, err error) {
 	return connectorutil.ExtractGrantCredentialFrom(creds, connectorutil.DefaultCredentialName)
 }
