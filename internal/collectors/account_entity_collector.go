@@ -46,13 +46,10 @@ func (c *AccountEntityCollector) Start(ctx context.Context) error {
 	client := c.newClient(c.GetOptions().GetBaseURL(), clientID, clientSecret)
 
 	// Pass 1: emit accounts, datasource links, and the account-scoped derived
-	// graph (risk factors, classifications, and grid-derived attributes). Index
-	// accounts by external id (for the fetch attribute join) and bucket them by
-	// datasource (for entity-type probing). seen* dedupe the definition entities
-	// (Attribute/RiskFactor/Classification) whose refs recur across accounts; the
-	// attribute set is shared with Pass 2 so grid and fetched names don't clash.
-	accountRefs := make(map[string]struct{})
-	byDatasource := make(map[string][]accountProbe)
+	// graph from the search grid — entities + grid-enriched attributes (computed
+	// fields not present in the datastore) + risk factors + classifications. seen*
+	// dedupe the definition entities (Attribute/RiskFactor/Classification) whose
+	// refs recur across accounts; the attribute set is shared with Pass 2.
 	seen := accountSeen{
 		attr:  make(map[string]struct{}),
 		risk:  make(map[string]struct{}),
@@ -78,21 +75,17 @@ func (c *AccountEntityCollector) Start(ctx context.Context) error {
 			if err := c.emitAccountDerived(ctx, row, account.AccountRef, seen); err != nil {
 				return err
 			}
-			accountRefs[account.AccountRef] = struct{}{}
-			if dsID != "" {
-				byDatasource[dsID] = append(byDatasource[dsID],
-					accountProbe{ref: account.AccountRef, accountType: mappings.AccountTypeRaw(row)})
-			}
 		}
 		return nil
 	}); err != nil {
 		return err
 	}
 
-	// Pass 2: collect each account's full (native) attribute set from the
-	// datastore and emit Attribute definitions + AccountAttribute value edges,
-	// sharing the Pass 1 attribute-definition dedupe set.
-	return collectAccountAttributes(ctx, c, client, accountRefs, byDatasource, seen.attr)
+	// Pass 2: stream every native account record from the datastore in a single
+	// prefix-filtered firehose and emit AccountAttribute value edges, sharing the
+	// Pass 1 attribute-definition dedupe set. No account-ref join (no FK); merkle
+	// reconciliation owns change/delete detection.
+	return collectAccountAttributes(ctx, c, client, seen.attr)
 }
 
 // accountSeen holds the dedupe sets for the definition entities the account
