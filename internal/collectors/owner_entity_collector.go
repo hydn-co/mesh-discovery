@@ -47,14 +47,11 @@ func (c *OwnerEntityCollector) Start(ctx context.Context) error {
 
 	client := c.newClient(c.GetOptions().GetBaseURL(), clientID, clientSecret)
 
-	// Owners are global identities, not per-datasource datastore entities, so the
-	// owner feed itself carries the full person object. Each owner row is emitted
-	// as a Person, and its remaining fields are folded into Attribute definitions
-	// + PersonAttribute value edges (same flatten/emit pattern as the account and
-	// group attribute passes). seenAttr dedupes the definitions this run emits
-	// into the additive "attributes" dictionary.
+	// Pass 1: emit Persons from the owner search grid, folding the grid-enriched
+	// fields into PersonAttribute value edges. seenAttr dedupes the Attribute
+	// definitions this run emits; it is shared with Pass 2.
 	seenAttr := make(map[string]struct{})
-	return client.ForEachOwnerPage(ctx, func(page []api.Row, _, _ int) error {
+	if err := client.ForEachOwnerPage(ctx, func(page []api.Row, _, _ int) error {
 		for _, row := range page {
 			person := mappings.MapOwner(row)
 			if person == nil {
@@ -74,5 +71,11 @@ func (c *OwnerEntityCollector) Start(ctx context.Context) error {
 			}
 		}
 		return nil
-	})
+	}); err != nil {
+		return err
+	}
+
+	// Pass 2: stream every native identity record from the datastore in a single
+	// prefix-filtered firehose and emit PersonAttribute value edges.
+	return collectPersonAttributes(ctx, c, client, seenAttr)
 }
