@@ -52,12 +52,9 @@ func (c *GroupEntityCollector) Start(ctx context.Context) error {
 		return fmt.Errorf("build datasource index: %w", err)
 	}
 
-	// Pass 1: emit groups, application links, and grid-derived attributes. Index
-	// groups by external id (for the fetch join) and bucket them by datasource id
-	// (for entity-type probing). seenAttr dedupes the Attribute definitions this
-	// run emits into the additive "attributes" dictionary (shared, never pruned).
-	groupRefs := make(map[string]struct{})
-	byDatasource := make(map[string][]string)
+	// Pass 1: emit groups, application links, and grid-enriched attributes from the
+	// search grid. seenAttr dedupes the Attribute definitions this run emits into
+	// the additive "attributes" dictionary; it is shared with Pass 3.
 	seenAttr := make(map[string]struct{})
 	if err := client.ForEachGroupPage(ctx, func(page []api.Row, _, _ int) error {
 		for _, row := range page {
@@ -68,8 +65,7 @@ func (c *GroupEntityCollector) Start(ctx context.Context) error {
 			if err := c.Emit(ctx, group); err != nil {
 				return fmt.Errorf("emit group %s: %w", group.GroupRef, err)
 			}
-			dsID := appIDByName[mappings.GroupDatasourceName(row)]
-			if dsID != "" {
+			if dsID := appIDByName[mappings.GroupDatasourceName(row)]; dsID != "" {
 				if edge := mappings.NewApplicationGroup(dsID, group.GroupRef); edge != nil {
 					if err := c.Emit(ctx, edge); err != nil {
 						return fmt.Errorf("emit application-group %s: %w", group.GroupRef, err)
@@ -85,33 +81,32 @@ func (c *GroupEntityCollector) Start(ctx context.Context) error {
 			); err != nil {
 				return err
 			}
-			groupRefs[group.GroupRef] = struct{}{}
-			if dsID != "" {
-				byDatasource[dsID] = append(byDatasource[dsID], group.GroupRef)
-			}
 		}
 		return nil
 	}); err != nil {
 		return err
 	}
 
-	// Pass 2: emit memberships.
-	if err := client.ForEachGroupMembershipPage(ctx, func(page []api.Row, _, _ int) error {
-		for _, row := range page {
-			member := mappings.MapGroupMember(row)
-			if member == nil {
-				continue
-			}
-			if err := c.Emit(ctx, member); err != nil {
-				return fmt.Errorf("emit group member %s/%s: %w", member.GroupRef, member.AccountRef, err)
-			}
+	// Pass 2: emit account<->group memberships from the edge.membership stream —
+	// one prefix-filtered firehose, the same pattern as edge.role. edge.From is
+	// the group external id, edge.To the member account external id.
+	if err := client.FetchEntities(ctx, "", membershipEntityType, func(edge *api.FetchedEntity) error {
+		if edge.Tombstoned {
+			return nil
+		}
+		member := mappings.NewGroupMember(edge.From, edge.To)
+		if member == nil {
+			return nil
+		}
+		if err := c.Emit(ctx, member); err != nil {
+			return fmt.Errorf("emit group member %s/%s: %w", member.GroupRef, member.AccountRef, err)
 		}
 		return nil
 	}); err != nil {
 		return err
 	}
 
-	// Pass 3: collect each group's full (native) attribute set from the datastore
-	// and emit Attribute definitions + GroupAttribute value edges.
-	return collectGroupAttributes(ctx, c, client, groupRefs, byDatasource, seenAttr)
+	// Pass 3: stream every native group record from the datastore in a single
+	// prefix-filtered firehose and emit GroupAttribute value edges.
+	return collectGroupAttributes(ctx, c, client, seenAttr)
 }

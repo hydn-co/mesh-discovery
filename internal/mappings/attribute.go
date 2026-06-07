@@ -11,12 +11,6 @@ import (
 	"github.com/hydn-co/mesh-discovery/internal/api"
 )
 
-// AccountTypeRaw returns the raw "Account Type" value from an account row, used
-// to bucket accounts when probing a datasource's entity-type variants.
-func AccountTypeRaw(row api.Row) string {
-	return getString(row, "Account Type")
-}
-
 // NewAttribute creates a distinct attribute definition. ref is the attribute's
 // stable key (the flattened field name).
 func NewAttribute(ref string) *entities.Attribute {

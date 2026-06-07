@@ -35,8 +35,13 @@ func MapGroup(row api.Row) *entities.Group {
 // differs from the "Group Id"/"Id" keys on the group and account feeds, but the
 // id VALUES match). Returns nil when either side is missing.
 func MapGroupMember(row api.Row) *entities.GroupMember {
-	groupRef := getString(row, "Group ID")
-	accountRef := getString(row, "Account ID")
+	return NewGroupMember(getString(row, "Group ID"), getString(row, "Account ID"))
+}
+
+// NewGroupMember builds a GroupMember edge. groupRef is the containing group,
+// accountRef the member account — matching the datastore edge.membership shape
+// (From = group, To = member account). Returns nil when either side is missing.
+func NewGroupMember(groupRef, accountRef string) *entities.GroupMember {
 	if groupRef == "" || accountRef == "" {
 		return nil
 	}

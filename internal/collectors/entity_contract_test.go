@@ -61,13 +61,6 @@ func (fakeDiscoveryClient) ForEachGroupPage(_ context.Context, cb api.PageFunc) 
 	}, 1, 2)
 }
 
-func (fakeDiscoveryClient) ForEachGroupMembershipPage(_ context.Context, cb api.PageFunc) error {
-	return cb([]api.Row{
-		{"Group ID": "grp-1", "Account ID": "acc-1"},
-		{"Group ID": "grp-2", "Account ID": "acc-3"},
-	}, 1, 2)
-}
-
 func (fakeDiscoveryClient) ForEachOwnerPage(_ context.Context, cb api.PageFunc) error {
 	return cb([]api.Row{
 		{"Identity Id": "own-1", "Identity Name": "Owner One", "Identity Email": "owner1@example", "Department": "IT"},
@@ -88,19 +81,30 @@ func (fakeDiscoveryClient) FetchEntities(
 	case "edge.role":
 		// edge.role: From = role external id, To = account external id.
 		return cb(&api.FetchedEntity{Type: "edge.role", From: "role-1", To: "acc-1"})
-	case "principal.account.user":
+	case membershipEntityType:
+		// edge.membership: From = group external id, To = member account id.
+		return cb(&api.FetchedEntity{Type: membershipEntityType, From: "grp-1", To: "acc-1"})
+	case accountEntityTypePrefix:
 		return cb(&api.FetchedEntity{
 			ID:     "acc-1",
-			Type:   entityType,
+			Type:   "principal.account.user.generic",
 			Entity: map[string]any{"department": "IT", "title": "Admin"},
+		})
+	case groupEntityTypePrefix:
+		return cb(&api.FetchedEntity{
+			ID:     "grp-1",
+			Type:   "group.generic",
+			Entity: map[string]any{"distinguished_name": "CN=Admins"},
+		})
+	case personEntityTypePrefix:
+		return cb(&api.FetchedEntity{
+			ID:     "own-1",
+			Type:   "identity.auto",
+			Entity: map[string]any{"manager": "Jane"},
 		})
 	default:
 		return nil
 	}
-}
-
-func (fakeDiscoveryClient) GetAccountDetails(_ context.Context, _, _ string) (map[string]any, error) {
-	return map[string]any{"type": "principal.account.user"}, nil
 }
 
 func newContractContext[T connector.FeatureOptions](
