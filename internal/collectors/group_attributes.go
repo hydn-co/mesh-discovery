@@ -3,8 +3,6 @@ package collectors
 import (
 	"context"
 
-	"github.com/hydn-co/mesh-sdk/pkg/connector"
-
 	"github.com/hydn-co/mesh-discovery/internal/api"
 	"github.com/hydn-co/mesh-discovery/internal/mappings"
 )
@@ -20,20 +18,20 @@ const groupEntityTypePrefix = "group"
 const membershipEntityType = "edge.membership"
 
 // collectGroupAttributes streams every native group record from the datastore in
-// one prefix-filtered firehose and emits Attribute definitions + GroupAttribute
-// value edges. As with accounts, there is no group-ref join (no FK); merkle
-// reconciliation owns change/delete detection.
+// one prefix-filtered firehose and folds its native attributes into the
+// per-group accumulator (keyed by the record id, the group ref). As with
+// accounts, there is no group-ref join (no FK); merkle reconciliation owns
+// change/delete detection.
 func collectGroupAttributes(
 	ctx context.Context,
-	emitter connector.EntityEmitter,
 	client discoveryClient,
-	seenAttr map[string]struct{},
+	attrs *attrAccumulator,
 ) error {
 	return client.FetchEntities(ctx, "", groupEntityTypePrefix, func(e *api.FetchedEntity) error {
 		if e.Tombstoned || e.ID == "" {
 			return nil
 		}
-		return emitNamedAttributes(ctx, emitter, mappings.FlattenFetchedEntity(e), seenAttr,
-			func(name, value string) any { return mappings.NewGroupAttribute(e.ID, name, value) })
+		attrs.add(e.ID, mappings.FlattenFetchedEntity(e))
+		return nil
 	})
 }

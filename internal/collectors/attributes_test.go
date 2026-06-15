@@ -22,72 +22,97 @@ func runAccountCollector(t *testing.T) []any {
 	return emitter.emitted
 }
 
-func TestShouldEmitAccountRiskFactorsAtFullConfidence(t *testing.T) {
-	emitted := runAccountCollector(t)
-
-	var (
-		defs  []*entities.RiskFactor
-		edges []*entities.AccountRiskFactor
-	)
+// findAccountExtension returns the single AccountExtension for ref, failing if
+// it is missing or duplicated (one consolidated entity per account is the #1436
+// invariant).
+func findAccountExtension(t *testing.T, emitted []any, ref string) *entities.AccountExtension {
+	t.Helper()
+	var found *entities.AccountExtension
 	for _, e := range emitted {
-		switch v := e.(type) {
-		case *entities.RiskFactor:
-			defs = append(defs, v)
-		case *entities.AccountRiskFactor:
-			edges = append(edges, v)
+		if ext, ok := e.(*entities.AccountExtension); ok && ext.AccountRef == ref {
+			require.Nil(t, found, "account %s must have exactly one AccountExtension", ref)
+			found = ext
 		}
 	}
-
-	require.Len(t, defs, 1, "acc-1 has exactly one risk indicator in the fixture")
-	assert.Equal(t, "mfa-not-enabled", defs[0].RiskFactorRef)
-	assert.Equal(t, "Password & Security", defs[0].Category)
-	assert.Equal(t, 5.0, defs[0].Weight)
-
-	require.Len(t, edges, 1)
-	assert.Equal(t, "acc-1", edges[0].AccountRef)
-	assert.Equal(t, "mfa-not-enabled", edges[0].RiskFactorRef)
-	assert.Equal(t, 1.0, edges[0].Confidence)
+	require.NotNil(t, found, "expected an AccountExtension for %s", ref)
+	return found
 }
 
-func TestShouldEmitAccountClassificationsAtFullConfidence(t *testing.T) {
-	emitted := runAccountCollector(t)
-
-	var edges []*entities.AccountClassification
-	defs := map[string]struct{}{}
-	for _, e := range emitted {
-		switch v := e.(type) {
-		case *entities.Classification:
-			defs[v.ClassificationRef] = struct{}{}
-		case *entities.AccountClassification:
-			edges = append(edges, v)
-		}
-	}
-
-	_, ok := defs["admin"]
-	assert.True(t, ok, "Classifications=\"Admin\" yields the admin classification")
-	require.Len(t, edges, 1)
-	assert.Equal(t, "acc-1", edges[0].AccountRef)
-	assert.Equal(t, "admin", edges[0].ClassificationRef)
-	assert.Equal(t, 1.0, edges[0].Confidence)
-}
-
-func TestShouldEmitAccountAttributeDefinitionsAndValues(t *testing.T) {
-	emitted := runAccountCollector(t)
-
-	var defs, vals int
+// assertNoLegacyCatalogEntities guards the consolidation: none of the old
+// per-edge / definition entity types may be emitted any longer.
+func assertNoLegacyCatalogEntities(t *testing.T, emitted []any) {
+	t.Helper()
 	for _, e := range emitted {
 		switch e.(type) {
-		case *entities.Attribute:
-			defs++
-		case *entities.AccountAttribute:
-			vals++
+		case *entities.Attribute,
+			*entities.AccountAttribute,
+			*entities.GroupAttribute,
+			*entities.PersonAttribute,
+			*entities.Classification,
+			*entities.AccountClassification,
+			*entities.RiskFactor,
+			*entities.AccountRiskFactor:
+			t.Errorf("legacy fan-out entity %T must no longer be emitted", e)
 		}
 	}
-	assert.Positive(t, defs, "the account collector owns the attribute dictionary")
-	assert.Positive(t, vals)
 }
 
-func TestShouldEmitGroupAttributeDefinitionsAndValues(t *testing.T) {
+func TestShouldFoldAccountRiskFactorsIntoExtensionAtFullConfidence(t *testing.T) {
+	emitted := runAccountCollector(t)
+	ext := findAccountExtension(t, emitted, "acc-1")
+
+	require.Len(t, ext.RiskFactors, 1, "acc-1 has exactly one risk indicator in the fixture")
+	assert.Equal(t, "mfa-not-enabled", ext.RiskFactors[0].Ref)
+	assert.Equal(t, "Password & Security", ext.RiskFactors[0].Category)
+	assert.Equal(t, 5.0, ext.RiskFactors[0].Weight)
+	assert.Equal(t, 1.0, ext.RiskFactors[0].Confidence)
+
+	assertNoLegacyCatalogEntities(t, emitted)
+}
+
+func TestShouldFoldAccountClassificationsIntoExtensionAtFullConfidence(t *testing.T) {
+	emitted := runAccountCollector(t)
+	ext := findAccountExtension(t, emitted, "acc-1")
+
+	var admin *entities.ClassificationEntry
+	for i := range ext.Classifications {
+		if ext.Classifications[i].Ref == "admin" {
+			admin = &ext.Classifications[i]
+		}
+	}
+	require.NotNil(t, admin, "Classifications=\"Admin\" yields the admin classification")
+	assert.Equal(t, 1.0, admin.Confidence)
+}
+
+func TestShouldFoldAccountAttributesIntoExtension(t *testing.T) {
+	emitted := runAccountCollector(t)
+	ext := findAccountExtension(t, emitted, "acc-1")
+
+	assert.NotEmpty(t, ext.Attributes, "the account extension carries the account's attributes inline")
+	assertNoLegacyCatalogEntities(t, emitted)
+}
+
+func TestShouldEmitOneAccountExtensionPerAccount(t *testing.T) {
+	emitted := runAccountCollector(t)
+
+	accounts := map[string]struct{}{}
+	extensions := map[string]int{}
+	for _, e := range emitted {
+		switch v := e.(type) {
+		case *entities.Account:
+			accounts[v.AccountRef] = struct{}{}
+		case *entities.AccountExtension:
+			extensions[v.AccountRef]++
+		}
+	}
+
+	require.NotEmpty(t, accounts)
+	for ref := range accounts {
+		assert.Equal(t, 1, extensions[ref], "account %s must have exactly one extension", ref)
+	}
+}
+
+func TestShouldFoldGroupAttributesIntoExtension(t *testing.T) {
 	emitter := &captureEntityEmitter{}
 	c := &GroupEntityCollector{
 		TypedFeatureContext: newContractContext(t, emitter,
@@ -96,32 +121,23 @@ func TestShouldEmitGroupAttributeDefinitionsAndValues(t *testing.T) {
 	}
 	runCollector(t, c)
 
-	defs := map[string]struct{}{}
-	var values []*entities.GroupAttribute
+	byGroup := map[string]map[string]string{}
 	for _, e := range emitter.emitted {
-		switch v := e.(type) {
-		case *entities.GroupAttribute:
-			values = append(values, v)
-		case *entities.Attribute:
-			defs[v.AttributeRef] = struct{}{}
+		if ext, ok := e.(*entities.GroupExtension); ok {
+			values := map[string]string{}
+			for _, a := range ext.Attributes {
+				values[a.Ref] = a.Value
+			}
+			byGroup[ext.GroupRef] = values
 		}
 	}
 
-	require.NotEmpty(t, values)
-	byGroup := map[string]map[string]string{}
-	for _, v := range values {
-		if byGroup[v.GroupRef] == nil {
-			byGroup[v.GroupRef] = map[string]string{}
-		}
-		byGroup[v.GroupRef][v.AttributeRef] = v.Value
-	}
+	require.NotEmpty(t, byGroup)
 	assert.Equal(t, "corp", byGroup["grp-1"]["Group Domain"])
-	// The group collector emits the named definition for each attribute it sets.
-	_, ok := defs["Group Domain"]
-	assert.True(t, ok, "group collector emits the Attribute definition for Group Domain")
+	assertNoLegacyCatalogEntities(t, emitter.emitted)
 }
 
-func TestShouldEmitPersonAttributeDefinitionsAndValues(t *testing.T) {
+func TestShouldFoldPersonAttributesIntoExtension(t *testing.T) {
 	emitter := &captureEntityEmitter{}
 	c := &OwnerEntityCollector{
 		TypedFeatureContext: newContractContext(t, emitter,
@@ -130,26 +146,20 @@ func TestShouldEmitPersonAttributeDefinitionsAndValues(t *testing.T) {
 	}
 	runCollector(t, c)
 
-	defs := map[string]struct{}{}
-	var values []*entities.PersonAttribute
+	var ownExt *entities.PeopleExtension
 	for _, e := range emitter.emitted {
-		switch v := e.(type) {
-		case *entities.PersonAttribute:
-			values = append(values, v)
-		case *entities.Attribute:
-			defs[v.AttributeRef] = struct{}{}
+		if ext, ok := e.(*entities.PeopleExtension); ok && ext.PersonRef == "own-1" {
+			ownExt = ext
 		}
 	}
 
-	require.NotEmpty(t, values)
-	assert.Equal(t, "own-1", values[0].PersonRef)
+	require.NotNil(t, ownExt, "expected a PeopleExtension for own-1")
 	found := false
-	for _, v := range values {
-		if v.AttributeRef == "Department" && v.Value == "IT" {
+	for _, a := range ownExt.Attributes {
+		if a.Ref == "Department" && a.Value == "IT" {
 			found = true
 		}
 	}
-	assert.True(t, found, "owner's Department field becomes a PersonAttribute")
-	_, ok := defs["Department"]
-	assert.True(t, ok, "owner collector emits the Attribute definition for Department")
+	assert.True(t, found, "owner's Department field becomes an extension attribute entry")
+	assertNoLegacyCatalogEntities(t, emitter.emitted)
 }

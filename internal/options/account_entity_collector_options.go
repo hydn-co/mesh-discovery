@@ -12,19 +12,14 @@ func (o *AccountEntityCollectorOptions) GetDiscriminator() string {
 }
 
 func (o *AccountEntityCollectorOptions) GetSpaces() []spaces.Space {
-	// NOTE: spaces.Attributes (the attribute-definition dictionary) is emitted by
-	// this collector but intentionally NOT declared here. It is an additive,
-	// shared space: declaring it would mark it owned (full-set reconcile, which
-	// prunes) and would collide with the group/owner collectors that also emit
-	// definitions. Declared spaces are the ones this collector owns/reconciles.
+	// Per hydn-co/control#1436, this collector emits one consolidated
+	// AccountExtension per account (attributes, classifications, and risk factors
+	// inline) instead of the per-edge fan-out into the attribute/classification/
+	// risk-factor definition and edge spaces.
 	return []spaces.Space{
 		spaces.Accounts,
 		spaces.ApplicationAccounts,
-		spaces.AccountAttributes,
-		spaces.RiskFactors,
-		spaces.AccountRiskFactors,
-		spaces.Classifications,
-		spaces.AccountClassifications,
+		spaces.AccountExtensions,
 	}
 }
 

@@ -181,31 +181,25 @@ func TestShouldEmitAccountsAndApplicationLinksWhenAccountCollectorRuns(t *testin
 	assertEmittedEntityContract(t, emitter.emitted, []any{
 		&entities.Account{},
 		&entities.ApplicationAccount{},
-		&entities.Attribute{},
-		&entities.AccountAttribute{},
-		&entities.RiskFactor{},
-		&entities.AccountRiskFactor{},
-		&entities.Classification{},
-		&entities.AccountClassification{},
+		&entities.AccountExtension{},
 	}, (&options.AccountEntityCollectorOptions{}).GetSpaces())
 
 	links := applicationAccountLinks(emitter.emitted)
 	require.Equal(t, "ds1", links["acc-1"])
 	require.Equal(t, "ds2", links["acc-3"])
 
-	// Attribute values land on AccountAttribute edges; distinct names as Attributes.
-	var attrVals, attrDefs int
+	// Attributes, classifications, and risk factors are consolidated onto a single
+	// AccountExtension per account rather than fanned out into edges.
+	var extensions int
 	for _, e := range emitter.emitted {
-		switch v := e.(type) {
-		case *entities.AccountAttribute:
-			require.Equal(t, "acc-1", v.AccountRef)
-			attrVals++
-		case *entities.Attribute:
-			attrDefs++
+		if ext, ok := e.(*entities.AccountExtension); ok {
+			extensions++
+			if ext.AccountRef == "acc-1" {
+				require.NotEmpty(t, ext.Attributes, "acc-1 extension carries its attributes inline")
+			}
 		}
 	}
-	require.Positive(t, attrVals)
-	require.Positive(t, attrDefs)
+	require.Positive(t, extensions)
 }
 
 func TestShouldEmitGroupsMembersAndApplicationLinksWhenGroupCollectorRuns(t *testing.T) {
@@ -220,7 +214,7 @@ func TestShouldEmitGroupsMembersAndApplicationLinksWhenGroupCollectorRuns(t *tes
 	assertEmittedEntityContract(t, emitter.emitted,
 		[]any{
 			&entities.Group{}, &entities.GroupMember{}, &entities.ApplicationGroup{},
-			&entities.Attribute{}, &entities.GroupAttribute{},
+			&entities.GroupExtension{},
 		},
 		(&options.GroupEntityCollectorOptions{}).GetSpaces())
 
@@ -241,7 +235,7 @@ func TestShouldEmitPersonsWhenOwnerCollectorRuns(t *testing.T) {
 	runCollector(t, c)
 
 	assertEmittedEntityContract(t, emitter.emitted,
-		[]any{&entities.Person{}, &entities.Attribute{}, &entities.PersonAttribute{}},
+		[]any{&entities.Person{}, &entities.PeopleExtension{}},
 		(&options.OwnerEntityCollectorOptions{}).GetSpaces())
 }
 
