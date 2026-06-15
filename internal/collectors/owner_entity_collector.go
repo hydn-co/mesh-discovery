@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/hydn-co/mesh-sdk/pkg/catalog/entities"
+	"github.com/hydn-co/mesh-sdk/pkg/catalog/spaces"
+	"github.com/hydn-co/mesh-sdk/pkg/catalog/types"
 	"github.com/hydn-co/mesh-sdk/pkg/connector"
 	"github.com/hydn-co/mesh-sdk/pkg/connectorutil"
 	"github.com/hydn-co/mesh-sdk/pkg/runner"
@@ -47,10 +50,11 @@ func (c *OwnerEntityCollector) Start(ctx context.Context) error {
 
 	client := c.newClient(c.GetOptions().GetBaseURL(), clientID, clientSecret)
 
-	// Pass 1: emit Persons from the owner search grid, folding the grid-enriched
-	// fields into PersonAttribute value edges. seenAttr dedupes the Attribute
-	// definitions this run emits; it is shared with Pass 2.
-	seenAttr := make(map[string]struct{})
+	// Pass 1: emit Persons from the owner search grid and accumulate each person's
+	// grid-enriched attributes. The consolidated PeopleExtension is emitted after
+	// Pass 2 so it carries attributes from both the grid and the datastore
+	// (hydn-co/control#1436).
+	attrs := newAttrAccumulator()
 	if err := client.ForEachOwnerPage(ctx, func(page []api.Row, _, _ int) error {
 		for _, row := range page {
 			person := mappings.MapOwner(row)
@@ -60,15 +64,7 @@ func (c *OwnerEntityCollector) Start(ctx context.Context) error {
 			if err := c.Emit(ctx, person); err != nil {
 				return fmt.Errorf("emit person %s: %w", person.PersonRef, err)
 			}
-			if err := emitNamedAttributes(
-				ctx,
-				c,
-				mappings.PersonGSAttributes(row),
-				seenAttr,
-				func(name, value string) any { return mappings.NewPersonAttribute(person.PersonRef, name, value) },
-			); err != nil {
-				return err
-			}
+			attrs.add(person.PersonRef, mappings.PersonGSAttributes(row))
 		}
 		return nil
 	}); err != nil {
@@ -76,6 +72,23 @@ func (c *OwnerEntityCollector) Start(ctx context.Context) error {
 	}
 
 	// Pass 2: stream every native identity record from the datastore in a single
-	// prefix-filtered firehose and emit PersonAttribute value edges.
-	return collectPersonAttributes(ctx, c, client, seenAttr)
+	// prefix-filtered firehose and fold its native attributes into the per-person
+	// accumulator.
+	if err := collectPersonAttributes(ctx, client, attrs); err != nil {
+		return err
+	}
+
+	// Emit one consolidated PeopleExtension per person seen in either pass.
+	for _, ref := range attrs.refs() {
+		ext := &entities.PeopleExtension{
+			Metadata:   types.EntityMetadata{Space: spaces.PeopleExtensions},
+			PersonRef:  ref,
+			Attributes: attrs.attributesFor(ref),
+		}
+		if err := c.Emit(ctx, ext); err != nil {
+			return fmt.Errorf("emit people extension %s: %w", ref, err)
+		}
+	}
+
+	return nil
 }

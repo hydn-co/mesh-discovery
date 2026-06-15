@@ -13,11 +13,13 @@ func (o *GroupEntityCollectorOptions) GetDiscriminator() string {
 }
 
 func (o *GroupEntityCollectorOptions) GetSpaces() []spaces.Space {
+	// Per hydn-co/control#1436, group attributes ship as one consolidated
+	// GroupExtension per group instead of per-attribute GroupAttribute edges.
 	return []spaces.Space{
 		spaces.Groups,
 		spaces.GroupMembers,
 		spaces.ApplicationGroups,
-		spaces.GroupAttributes,
+		spaces.GroupExtensions,
 	}
 }
 

@@ -3,8 +3,6 @@ package collectors
 import (
 	"context"
 
-	"github.com/hydn-co/mesh-sdk/pkg/connector"
-
 	"github.com/hydn-co/mesh-discovery/internal/api"
 	"github.com/hydn-co/mesh-discovery/internal/mappings"
 )
@@ -17,20 +15,19 @@ import (
 const personEntityTypePrefix = "identity"
 
 // collectPersonAttributes streams every native identity record from the
-// datastore in one prefix-filtered firehose and emits Attribute definitions +
-// PersonAttribute value edges. No person-ref join (no FK); merkle reconciliation
-// owns change/delete detection.
+// datastore in one prefix-filtered firehose and folds its native attributes into
+// the per-person accumulator (keyed by the record id, the person ref). No
+// person-ref join (no FK); merkle reconciliation owns change/delete detection.
 func collectPersonAttributes(
 	ctx context.Context,
-	emitter connector.EntityEmitter,
 	client discoveryClient,
-	seenAttr map[string]struct{},
+	attrs *attrAccumulator,
 ) error {
 	return client.FetchEntities(ctx, "", personEntityTypePrefix, func(e *api.FetchedEntity) error {
 		if e.Tombstoned || e.ID == "" {
 			return nil
 		}
-		return emitNamedAttributes(ctx, emitter, mappings.FlattenFetchedEntity(e), seenAttr,
-			func(name, value string) any { return mappings.NewPersonAttribute(e.ID, name, value) })
+		attrs.add(e.ID, mappings.FlattenFetchedEntity(e))
+		return nil
 	})
 }

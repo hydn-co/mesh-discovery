@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/hydn-co/mesh-sdk/pkg/catalog/entities"
+	"github.com/hydn-co/mesh-sdk/pkg/catalog/spaces"
+	"github.com/hydn-co/mesh-sdk/pkg/catalog/types"
 	"github.com/hydn-co/mesh-sdk/pkg/connector"
 	"github.com/hydn-co/mesh-sdk/pkg/connectorutil"
 	"github.com/hydn-co/mesh-sdk/pkg/runner"
@@ -47,14 +50,12 @@ func (c *AccountEntityCollector) Start(ctx context.Context) error {
 
 	// Pass 1: emit accounts, datasource links, and the account-scoped derived
 	// graph from the search grid — entities + grid-enriched attributes (computed
-	// fields not present in the datastore) + risk factors + classifications. seen*
-	// dedupe the definition entities (Attribute/RiskFactor/Classification) whose
-	// refs recur across accounts; the attribute set is shared with Pass 2.
-	seen := accountSeen{
-		attr:  make(map[string]struct{}),
-		risk:  make(map[string]struct{}),
-		class: make(map[string]struct{}),
-	}
+	// fields not present in the datastore), classifications, and risk factors. The
+	// consolidated AccountExtension is emitted after Pass 2 so it carries
+	// attributes from both the grid and the datastore (hydn-co/control#1436).
+	attrs := newAttrAccumulator()
+	classByRef := make(map[string][]entities.ClassificationEntry)
+	riskByRef := make(map[string][]entities.RiskFactorEntry)
 	if err := client.ForEachAccountPage(ctx, func(page []api.Row, _, _ int) error {
 		for _, row := range page {
 			account := mappings.MapAccount(row)
@@ -72,8 +73,12 @@ func (c *AccountEntityCollector) Start(ctx context.Context) error {
 					return fmt.Errorf("emit application-account %s: %w", account.AccountRef, err)
 				}
 			}
-			if err := c.emitAccountDerived(ctx, row, account.AccountRef, seen); err != nil {
-				return err
+			attrs.add(account.AccountRef, mappings.AccountGSAttributes(row))
+			if class := mappings.AccountClassificationEntries(row); class != nil {
+				classByRef[account.AccountRef] = class
+			}
+			if risk := mappings.AccountRiskFactorEntries(row); risk != nil {
+				riskByRef[account.AccountRef] = risk
 			}
 		}
 		return nil
@@ -82,62 +87,26 @@ func (c *AccountEntityCollector) Start(ctx context.Context) error {
 	}
 
 	// Pass 2: stream every native account record from the datastore in a single
-	// prefix-filtered firehose and emit AccountAttribute value edges, sharing the
-	// Pass 1 attribute-definition dedupe set. No account-ref join (no FK); merkle
-	// reconciliation owns change/delete detection.
-	return collectAccountAttributes(ctx, c, client, seen.attr)
-}
-
-// accountSeen holds the dedupe sets for the definition entities the account
-// collector emits across many account rows.
-type accountSeen struct {
-	attr  map[string]struct{}
-	risk  map[string]struct{}
-	class map[string]struct{}
-}
-
-// emitAccountDerived emits the account-scoped risk factors, classifications, and
-// grid-derived attributes for one account row. Definition entities are emitted
-// once per distinct ref via the shared dedupe sets; the per-account edges always
-// emit.
-func (c *AccountEntityCollector) emitAccountDerived(
-	ctx context.Context,
-	row api.Row,
-	accountRef string,
-	seen accountSeen,
-) error {
-	riskDefs, riskEdges := mappings.AccountRiskFactors(row)
-	for _, def := range riskDefs {
-		if _, ok := seen.risk[def.RiskFactorRef]; ok {
-			continue
-		}
-		seen.risk[def.RiskFactorRef] = struct{}{}
-		if err := c.Emit(ctx, def); err != nil {
-			return fmt.Errorf("emit risk factor %s: %w", def.RiskFactorRef, err)
-		}
+	// prefix-filtered firehose and fold its native attributes into the same
+	// per-account accumulator. No account-ref join (no FK); merkle reconciliation
+	// owns change/delete detection.
+	if err := collectAccountAttributes(ctx, client, attrs); err != nil {
+		return err
 	}
-	for _, edge := range riskEdges {
-		if err := c.Emit(ctx, edge); err != nil {
-			return fmt.Errorf("emit account risk factor %s/%s: %w", accountRef, edge.RiskFactorRef, err)
+
+	// Emit one consolidated AccountExtension per account seen in either pass.
+	for _, ref := range attrs.refs() {
+		ext := &entities.AccountExtension{
+			Metadata:        types.EntityMetadata{Space: spaces.AccountExtensions},
+			AccountRef:      ref,
+			Attributes:      attrs.attributesFor(ref),
+			Classifications: classByRef[ref],
+			RiskFactors:     riskByRef[ref],
+		}
+		if err := c.Emit(ctx, ext); err != nil {
+			return fmt.Errorf("emit account extension %s: %w", ref, err)
 		}
 	}
 
-	classDefs, classEdges := mappings.AccountClassifications(row)
-	for _, def := range classDefs {
-		if _, ok := seen.class[def.ClassificationRef]; ok {
-			continue
-		}
-		seen.class[def.ClassificationRef] = struct{}{}
-		if err := c.Emit(ctx, def); err != nil {
-			return fmt.Errorf("emit classification %s: %w", def.ClassificationRef, err)
-		}
-	}
-	for _, edge := range classEdges {
-		if err := c.Emit(ctx, edge); err != nil {
-			return fmt.Errorf("emit account classification %s/%s: %w", accountRef, edge.ClassificationRef, err)
-		}
-	}
-
-	return emitNamedAttributes(ctx, c, mappings.AccountGSAttributes(row), seen.attr,
-		func(name, value string) any { return mappings.NewAccountAttribute(accountRef, name, value) })
+	return nil
 }

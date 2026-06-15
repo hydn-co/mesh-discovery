@@ -14,7 +14,9 @@ func (o *OwnerEntityCollectorOptions) GetDiscriminator() string {
 }
 
 func (o *OwnerEntityCollectorOptions) GetSpaces() []spaces.Space {
-	return []spaces.Space{spaces.Persons, spaces.PersonAttributes}
+	// Per hydn-co/control#1436, person attributes ship as one consolidated
+	// PeopleExtension per person instead of per-attribute PersonAttribute edges.
+	return []spaces.Space{spaces.Persons, spaces.PeopleExtensions}
 }
 
 func (o *OwnerEntityCollectorOptions) GetRequirements() []string {

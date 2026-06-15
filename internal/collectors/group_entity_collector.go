@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/hydn-co/mesh-sdk/pkg/catalog/entities"
+	"github.com/hydn-co/mesh-sdk/pkg/catalog/spaces"
+	"github.com/hydn-co/mesh-sdk/pkg/catalog/types"
 	"github.com/hydn-co/mesh-sdk/pkg/connector"
 	"github.com/hydn-co/mesh-sdk/pkg/connectorutil"
 	"github.com/hydn-co/mesh-sdk/pkg/runner"
@@ -52,10 +55,11 @@ func (c *GroupEntityCollector) Start(ctx context.Context) error {
 		return fmt.Errorf("build datasource index: %w", err)
 	}
 
-	// Pass 1: emit groups, application links, and grid-enriched attributes from the
-	// search grid. seenAttr dedupes the Attribute definitions this run emits into
-	// the additive "attributes" dictionary; it is shared with Pass 3.
-	seenAttr := make(map[string]struct{})
+	// Pass 1: emit groups and application links, and accumulate each group's
+	// grid-enriched attributes. The consolidated GroupExtension is emitted after
+	// Pass 3 so it carries attributes from both the grid and the datastore
+	// (hydn-co/control#1436).
+	attrs := newAttrAccumulator()
 	if err := client.ForEachGroupPage(ctx, func(page []api.Row, _, _ int) error {
 		for _, row := range page {
 			group := mappings.MapGroup(row)
@@ -72,15 +76,7 @@ func (c *GroupEntityCollector) Start(ctx context.Context) error {
 					}
 				}
 			}
-			if err := emitNamedAttributes(
-				ctx,
-				c,
-				mappings.GroupGSAttributes(row),
-				seenAttr,
-				func(name, value string) any { return mappings.NewGroupAttribute(group.GroupRef, name, value) },
-			); err != nil {
-				return err
-			}
+			attrs.add(group.GroupRef, mappings.GroupGSAttributes(row))
 		}
 		return nil
 	}); err != nil {
@@ -107,6 +103,23 @@ func (c *GroupEntityCollector) Start(ctx context.Context) error {
 	}
 
 	// Pass 3: stream every native group record from the datastore in a single
-	// prefix-filtered firehose and emit GroupAttribute value edges.
-	return collectGroupAttributes(ctx, c, client, seenAttr)
+	// prefix-filtered firehose and fold its native attributes into the per-group
+	// accumulator.
+	if err := collectGroupAttributes(ctx, client, attrs); err != nil {
+		return err
+	}
+
+	// Emit one consolidated GroupExtension per group seen in either pass.
+	for _, ref := range attrs.refs() {
+		ext := &entities.GroupExtension{
+			Metadata:   types.EntityMetadata{Space: spaces.GroupExtensions},
+			GroupRef:   ref,
+			Attributes: attrs.attributesFor(ref),
+		}
+		if err := c.Emit(ctx, ext); err != nil {
+			return fmt.Errorf("emit group extension %s: %w", ref, err)
+		}
+	}
+
+	return nil
 }

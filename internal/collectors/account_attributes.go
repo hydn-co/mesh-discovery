@@ -3,8 +3,6 @@ package collectors
 import (
 	"context"
 
-	"github.com/hydn-co/mesh-sdk/pkg/connector"
-
 	"github.com/hydn-co/mesh-discovery/internal/api"
 	"github.com/hydn-co/mesh-discovery/internal/mappings"
 )
@@ -17,22 +15,21 @@ import (
 const accountEntityTypePrefix = "principal.account"
 
 // collectAccountAttributes streams every native account record from the
-// datastore in one prefix-filtered firehose and emits Attribute definitions +
-// AccountAttribute value edges. There is no account-ref join: the catalog has no
-// FK constraint, so an attribute may reference an account that arrives later (or
-// not at all), and merkle reconciliation owns change/delete detection. The only
-// in-memory state is the shared Attribute-definition dedupe set.
+// datastore in one prefix-filtered firehose and folds its native attributes into
+// the per-account accumulator (keyed by the record id, the account ref). There
+// is no account-ref join: the catalog has no FK constraint, so an attribute may
+// reference an account that arrives later (or not at all), and merkle
+// reconciliation owns change/delete detection.
 func collectAccountAttributes(
 	ctx context.Context,
-	emitter connector.EntityEmitter,
 	client discoveryClient,
-	seenAttr map[string]struct{},
+	attrs *attrAccumulator,
 ) error {
 	return client.FetchEntities(ctx, "", accountEntityTypePrefix, func(e *api.FetchedEntity) error {
 		if e.Tombstoned || e.ID == "" {
 			return nil
 		}
-		return emitNamedAttributes(ctx, emitter, mappings.FlattenFetchedEntity(e), seenAttr,
-			func(name, value string) any { return mappings.NewAccountAttribute(e.ID, name, value) })
+		attrs.add(e.ID, mappings.FlattenFetchedEntity(e))
+		return nil
 	})
 }
