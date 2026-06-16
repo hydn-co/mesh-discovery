@@ -78,15 +78,21 @@ func (c *OwnerEntityCollector) Start(ctx context.Context) error {
 		return err
 	}
 
-	// Emit one consolidated PeopleExtension per person seen in either pass.
+	// Emit each person's consolidated extension, split into chunks that fit the
+	// catalog storage per-entity limit (a small person yields a single chunk).
 	for _, ref := range attrs.refs() {
-		ext := &entities.PeopleExtension{
-			Metadata:   types.EntityMetadata{Space: spaces.PeopleExtensions},
-			PersonRef:  ref,
-			Attributes: attrs.attributesFor(ref),
-		}
-		if err := c.Emit(ctx, ext); err != nil {
-			return fmt.Errorf("emit people extension %s: %w", ref, err)
+		chunks := chunkExtensionContent(attrs.attributesFor(ref), nil, nil, len(ref))
+		for i, chunk := range chunks {
+			ext := &entities.PeopleExtension{
+				Metadata:    types.EntityMetadata{Space: spaces.PeopleExtensions},
+				PersonRef:   ref,
+				Sequence:    i,
+				TotalChunks: len(chunks),
+				Attributes:  chunk.Attributes,
+			}
+			if err := c.Emit(ctx, ext); err != nil {
+				return fmt.Errorf("emit people extension %s chunk %d: %w", ref, i, err)
+			}
 		}
 	}
 

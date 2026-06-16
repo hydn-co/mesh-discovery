@@ -94,17 +94,24 @@ func (c *AccountEntityCollector) Start(ctx context.Context) error {
 		return err
 	}
 
-	// Emit one consolidated AccountExtension per account seen in either pass.
+	// Emit each account's consolidated extension, split into chunks that fit the
+	// catalog storage per-entity limit. Sequence/TotalChunks let readers
+	// reassemble; a small account yields a single chunk (sequence 0, total 1).
 	for _, ref := range attrs.refs() {
-		ext := &entities.AccountExtension{
-			Metadata:        types.EntityMetadata{Space: spaces.AccountExtensions},
-			AccountRef:      ref,
-			Attributes:      attrs.attributesFor(ref),
-			Classifications: classByRef[ref],
-			RiskFactors:     riskByRef[ref],
-		}
-		if err := c.Emit(ctx, ext); err != nil {
-			return fmt.Errorf("emit account extension %s: %w", ref, err)
+		chunks := chunkExtensionContent(attrs.attributesFor(ref), classByRef[ref], riskByRef[ref], len(ref))
+		for i, chunk := range chunks {
+			ext := &entities.AccountExtension{
+				Metadata:        types.EntityMetadata{Space: spaces.AccountExtensions},
+				AccountRef:      ref,
+				Sequence:        i,
+				TotalChunks:     len(chunks),
+				Attributes:      chunk.Attributes,
+				Classifications: chunk.Classifications,
+				RiskFactors:     chunk.RiskFactors,
+			}
+			if err := c.Emit(ctx, ext); err != nil {
+				return fmt.Errorf("emit account extension %s chunk %d: %w", ref, i, err)
+			}
 		}
 	}
 
