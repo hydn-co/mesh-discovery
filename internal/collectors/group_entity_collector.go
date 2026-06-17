@@ -109,21 +109,16 @@ func (c *GroupEntityCollector) Start(ctx context.Context) error {
 		return err
 	}
 
-	// Emit each group's consolidated extension, split into chunks that fit the
-	// catalog storage per-entity limit (a small group yields a single chunk).
+	// Emit one consolidated GroupExtension per group; mesh-core shards oversized
+	// payloads transparently (hydn-co/mesh-core#271).
 	for _, ref := range attrs.refs() {
-		chunks := chunkExtensionContent(attrs.attributesFor(ref), nil, nil, len(ref))
-		for i, chunk := range chunks {
-			ext := &entities.GroupExtension{
-				Metadata:    types.EntityMetadata{Space: spaces.GroupExtensions},
-				GroupRef:    ref,
-				Sequence:    i,
-				TotalChunks: len(chunks),
-				Attributes:  chunk.Attributes,
-			}
-			if err := c.Emit(ctx, ext); err != nil {
-				return fmt.Errorf("emit group extension %s chunk %d: %w", ref, i, err)
-			}
+		ext := &entities.GroupExtension{
+			Metadata:   types.EntityMetadata{Space: spaces.GroupExtensions},
+			GroupRef:   ref,
+			Attributes: attrs.attributesFor(ref),
+		}
+		if err := c.Emit(ctx, ext); err != nil {
+			return fmt.Errorf("emit group extension %s: %w", ref, err)
 		}
 	}
 
