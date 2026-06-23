@@ -3,20 +3,23 @@ module github.com/hydn-co/mesh-discovery
 go 1.25.6
 
 require (
-	github.com/fgrzl/json v1.0.2
 	github.com/google/uuid v1.6.0
-	github.com/hydn-co/mesh-sdk v0.2.75
+	github.com/hydn-co/mesh-sdk v0.3.0
 	github.com/stretchr/testify v1.11.1
+)
+
+require (
+	github.com/hydn-co/substrate/enumerators v1.0.1 // indirect
+	github.com/hydn-co/substrate/es v1.0.1 // indirect
+	github.com/hydn-co/substrate/timestamp v1.0.0 // indirect
 )
 
 require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
-	github.com/fgrzl/enumerators v1.0.1 // indirect
-	github.com/fgrzl/es v1.0.1 // indirect
-	github.com/fgrzl/timestamp v1.0.0 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
+	github.com/hydn-co/substrate/json v1.0.2
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/otel v1.44.0 // indirect

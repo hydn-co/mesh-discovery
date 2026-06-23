@@ -28,6 +28,12 @@ jobs:
           go-version-file: go.mod
           cache: true
           cache-dependency-path: "**/go.sum"
+      # Deps are now private (hydn-co/mesh-sdk + substrate); mint a GitHub App token and
+      # configure git insteadOf + GOPRIVATE before any module fetch.
+      - uses: hydn-co/build-tools/.github/actions/setup-go-private@main
+        with:
+          client-id: ${{ secrets.MESH_MODULES_APP_CLIENT_ID }}
+          private-key: ${{ secrets.MESH_MODULES_APP_KEY }}
       - run: go mod download
       - uses: golangci/golangci-lint-action@v9.2.1
         with:
