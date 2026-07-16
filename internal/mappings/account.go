@@ -80,6 +80,8 @@ func mapAccountType(raw string) types.AccountType {
 		return types.AccountTypeServicePrincipal
 	case strings.Contains(s, "guest"):
 		return types.AccountTypeGuest
+	case strings.Contains(s, "group"):
+		return types.AccountTypeGroup
 	case strings.Contains(s, "root"):
 		return types.AccountTypeRoot
 	default:
