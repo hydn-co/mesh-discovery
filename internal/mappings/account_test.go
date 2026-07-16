@@ -84,6 +84,7 @@ func TestShouldMapAccountType(t *testing.T) {
 		"Service Account": types.AccountTypeServicePrincipal,
 		"Guest":           types.AccountTypeGuest,
 		"root":            types.AccountTypeRoot,
+		"Group":           types.AccountTypeUser,
 	}
 	for in, want := range cases {
 		assert.Equalf(t, want, mapAccountType(in), "type %q", in)
