@@ -34,3 +34,6 @@ jobs:
           version: latest
       - run: go build ./...
       - run: go test ./... -timeout 30s
+  entity-contract:
+    uses: hydn-co/build-tools/.github/workflows/entity-contract-check.yml@main
+    secrets: inherit
